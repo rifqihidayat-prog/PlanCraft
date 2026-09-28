@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   WeeklyProductionPlan, 
   ProductSKU, 
@@ -43,6 +43,18 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   const [selectedSkuToAdd, setSelectedSkuToAdd] = useState<ProductSKU | null>(null);
   const [newTargetKg, setNewTargetKg] = useState<string>('500');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('Perubahan rencana berhasil disimpan!');
+
+  // Sync state saat plan aktif berubah
+  useEffect(() => {
+    setTitle(plan.title);
+    setWeekNumber(plan.week_number);
+    setYear(plan.year);
+    setStartDate(plan.start_date);
+    setEndDate(plan.end_date);
+    setNotes(plan.notes || '');
+    setTargets(plan.targets);
+  }, [plan.id, plan.targets, plan.title, plan.week_number, plan.year, plan.start_date, plan.end_date, plan.notes]);
 
   // Total target
   const totalTargetKg = targets.reduce((sum, item) => sum + (item.target_kg || 0), 0);
@@ -72,12 +84,29 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     setTargets(updated);
   };
 
-  // Remove SKU from targets
+  // Remove SKU from targets and persist immediately
   const handleRemoveTarget = (skuId: string) => {
-    setTargets(targets.filter(t => t.sku_id !== skuId));
+    const updatedTargets = targets.filter(t => t.sku_id !== skuId);
+    setTargets(updatedTargets);
+
+    const updatedPlan: WeeklyProductionPlan = {
+      ...plan,
+      title,
+      week_number: Number(weekNumber),
+      year: Number(year),
+      start_date: startDate,
+      end_date: endDate,
+      notes,
+      targets: updatedTargets,
+    };
+
+    onSavePlan(updatedPlan);
+    setSuccessMessage('Item berhasil dihapus dari target mingguan & tersimpan!');
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  // Add new SKU to target list
+  // Add new SKU to target list and persist immediately
   const handleAddTarget = () => {
     if (!selectedSkuToAdd) {
       alert('Pilih barang terlebih dahulu.');
@@ -94,19 +123,31 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       target_kg: kg,
     };
 
-    setTargets([...targets, newItem]);
+    const updatedTargets = [...targets, newItem];
+    setTargets(updatedTargets);
     setSelectedSkuToAdd(null);
     setSearchQuery('');
     setNewTargetKg('500');
+
+    const updatedPlan: WeeklyProductionPlan = {
+      ...plan,
+      title,
+      week_number: Number(weekNumber),
+      year: Number(year),
+      start_date: startDate,
+      end_date: endDate,
+      notes,
+      targets: updatedTargets,
+    };
+
+    onSavePlan(updatedPlan);
+    setSuccessMessage(`Berhasil menambahkan ${newItem.sku_name} ke target!`);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (targets.length === 0) {
-      alert('Rencana produksi setidaknya harus memiliki 1 item target.');
-      return;
-    }
 
     const updatedPlan: WeeklyProductionPlan = {
       ...plan,
@@ -120,6 +161,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     };
 
     onSavePlan(updatedPlan);
+    setSuccessMessage('Perubahan rencana produksi mingguan berhasil disimpan!');
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3500);
   };
@@ -142,7 +184,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       {savedSuccess && (
         <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-2xl p-3.5 flex items-center space-x-2 text-xs font-semibold animate-in fade-in duration-300">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span>Perubahan rencana produksi mingguan berhasil disimpan!</span>
+          <span>{successMessage}</span>
         </div>
       )}
 

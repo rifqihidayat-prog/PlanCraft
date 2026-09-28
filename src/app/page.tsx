@@ -14,6 +14,7 @@ import {
   getStoredPlans, 
   saveStoredPlans, 
   getActivePlan, 
+  setActivePlanId,
   getStoredLogs, 
   saveStoredLogs, 
   addDailyLog, 
@@ -85,6 +86,7 @@ export default function HomePage() {
 
   const handleSavePlan = (updatedPlan: WeeklyProductionPlan) => {
     setActivePlan(updatedPlan);
+    setActivePlanId(updatedPlan.id);
     const currentPlans = getStoredPlans();
     const idx = currentPlans.findIndex(p => p.id === updatedPlan.id);
     const newPlans = idx >= 0 
@@ -92,6 +94,11 @@ export default function HomePage() {
       : [...currentPlans, updatedPlan];
     setPlans(newPlans);
     saveStoredPlans(newPlans);
+  };
+
+  const handleSelectPlan = (plan: WeeklyProductionPlan) => {
+    setActivePlan(plan);
+    setActivePlanId(plan.id);
   };
 
   const handleUpdateSKUs = (newSkus: ProductSKU[]) => {
@@ -206,6 +213,8 @@ export default function HomePage() {
         {/* Navbar */}
         <Navbar
           activePlan={activePlan}
+          plans={plans}
+          onSelectPlan={handleSelectPlan}
           currentUser={currentUser}
           isMobileFrame={isMobileFrame}
           setIsMobileFrame={setIsMobileFrame}
