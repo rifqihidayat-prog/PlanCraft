@@ -274,9 +274,12 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                 )}
               </div>
 
-              {/* Floating Autocomplete Dropdown Panel (Garis Hitam Gelap) */}
+              {/* Floating Autocomplete Dropdown Panel (Garis Hitam Gelap Tanpa Garis Putih) */}
               {isDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-black border border-slate-800 rounded-xl shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-900">
+                <div 
+                  style={{ backgroundColor: '#050505', borderColor: '#1e293b' }}
+                  className="absolute left-0 right-0 top-full mt-1.5 z-30 border rounded-xl shadow-2xl max-h-60 overflow-y-auto"
+                >
                   {filteredOptions.length === 0 ? (
                     <div className="p-3 text-xs text-slate-500 text-center">
                       Barang tidak ditemukan dalam database.
@@ -287,11 +290,15 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                         type="button"
                         key={item.id}
                         onClick={() => handleSelectItem(item)}
-                        className="w-full text-left p-2.5 hover:bg-slate-900 transition flex items-center justify-between group active:bg-slate-800"
+                        style={{ borderBottom: '1px solid #111827' }}
+                        className="w-full text-left p-2.5 hover:bg-slate-900 transition flex items-center justify-between group active:bg-slate-800 last:border-b-0"
                       >
                         <div className="min-w-0 pr-2">
                           <div className="flex items-center space-x-1.5">
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                            <span 
+                              style={{ backgroundColor: '#000000', borderColor: '#1e293b' }}
+                              className="text-[10px] font-mono px-1.5 py-0.5 rounded text-slate-400 border"
+                            >
                               {item.code}
                             </span>
                             {item.isInPlan ? (
@@ -299,7 +306,10 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                                 Target Plan: {formatKg(item.targetKg || 0)} Kg
                               </span>
                             ) : (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                              <span 
+                                style={{ backgroundColor: '#000000', borderColor: '#1e293b' }}
+                                className="text-[10px] px-1.5 py-0.5 rounded text-slate-400 border"
+                              >
                                 {item.category}
                               </span>
                             )}
