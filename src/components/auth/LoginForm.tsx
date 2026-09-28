@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { AuthUser } from '@/types';
-import { loginWithCredentials } from '@/lib/auth';
+import { loginWithCredentials, saveStoredUser } from '@/lib/auth';
+import { loginOnServer } from '@/lib/apiClient';
 import { 
   Snowflake, 
   Lock, 
@@ -26,7 +27,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) {
       setErrorMsg('Silakan masukkan username');
@@ -40,17 +41,36 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setIsLoading(true);
     setErrorMsg(null);
 
-    // Sedikit delay halus untuk feedback visual login
-    setTimeout(() => {
-      const res = loginWithCredentials(username, pin);
-      setIsLoading(false);
-
-      if (res.success && res.user) {
-        onLogin(res.user);
-      } else {
-        setErrorMsg(res.message || 'Username atau PIN tidak sesuai');
+    try {
+      // 1. Coba login ke server SQLite
+      const serverRes = await loginOnServer(username, pin);
+      if (serverRes.success && serverRes.user) {
+        saveStoredUser(serverRes.user);
+        setIsLoading(false);
+        onLogin(serverRes.user);
+        return;
       }
-    }, 250);
+
+      // 2. Jika server mengembalikan user tidak valid, tampilkan error
+      if (serverRes.message && serverRes.message !== 'Gagal terhubung ke server database') {
+        setIsLoading(false);
+        setErrorMsg(serverRes.message);
+        return;
+      }
+
+      // 3. Fallback jika server offline
+      const localRes = loginWithCredentials(username, pin);
+      setIsLoading(false);
+      if (localRes.success && localRes.user) {
+        saveStoredUser(localRes.user);
+        onLogin(localRes.user);
+      } else {
+        setErrorMsg(localRes.message || 'Username atau PIN tidak sesuai');
+      }
+    } catch {
+      setIsLoading(false);
+      setErrorMsg('Terjadi kesalahan saat masuk');
+    }
   };
 
   const handleQuickFill = (userType: 'admin' | 'produksi') => {

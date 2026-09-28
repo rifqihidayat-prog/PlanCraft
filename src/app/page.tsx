@@ -21,6 +21,14 @@ import {
   deleteDailyLog, 
   calculateWeeklySummary 
 } from '@/lib/storage';
+import { 
+  fetchInitialData, 
+  createProductionLog, 
+  removeProductionLog, 
+  saveProductionPlan, 
+  setActivePlanOnServer, 
+  saveSKUsToServer 
+} from '@/lib/apiClient';
 import { getStoredUser, logoutUser } from '@/lib/auth';
 import { Navbar } from '@/components/layout/Navbar';
 import { BottomNav, NavTab } from '@/components/layout/BottomNav';
@@ -45,20 +53,29 @@ export default function HomePage() {
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>('all');
   const [logs, setLogs] = useState<DailyProductionLog[]>(INITIAL_LOGS);
 
-  // Initialize from storage on mount
+  // Initialize from server SQLite database on mount
   useEffect(() => {
-    const loadedSkus = getStoredSKUs();
-    const loadedPlans = getStoredPlans();
-    const loadedPlan = getActivePlan();
-    const loadedLogs = getStoredLogs();
     const loadedUser = getStoredUser();
-
-    setSkus(loadedSkus);
-    setPlans(loadedPlans);
-    setActivePlan(loadedPlan);
-    setLogs(loadedLogs);
     setCurrentUser(loadedUser);
-    setIsClientLoaded(true);
+
+    async function initData() {
+      const serverData = await fetchInitialData();
+      if (serverData) {
+        setSkus(serverData.skus);
+        setPlans(serverData.plans);
+        setActivePlan(serverData.activePlan);
+        setLogs(serverData.logs);
+      } else {
+        // Fallback local
+        setSkus(getStoredSKUs());
+        setPlans(getStoredPlans());
+        setActivePlan(getActivePlan());
+        setLogs(getStoredLogs());
+      }
+      setIsClientLoaded(true);
+    }
+
+    initData();
   }, []);
 
   // Proteksi Akses: Tim Produksi tidak boleh mengakses planning atau skus
@@ -74,43 +91,59 @@ export default function HomePage() {
     setCurrentUser(null);
   };
 
-  const handleSaveLog = (newLogData: Omit<DailyProductionLog, 'id' | 'created_at'>) => {
-    const created = addDailyLog(newLogData);
-    setLogs(prev => [created, ...prev]);
+  const handleSaveLog = async (newLogData: Omit<DailyProductionLog, 'id' | 'created_at'>) => {
+    const created = await createProductionLog(newLogData);
+    if (created) {
+      setLogs(prev => [created, ...prev]);
+    } else {
+      const fallback = addDailyLog(newLogData);
+      setLogs(prev => [fallback, ...prev]);
+    }
   };
 
-  const handleDeleteLog = (id: string) => {
-    deleteDailyLog(id);
+  const handleDeleteLog = async (id: string) => {
     setLogs(prev => prev.filter(l => l.id !== id));
+    await removeProductionLog(id);
+    deleteDailyLog(id);
   };
 
-  const handleSavePlan = (updatedPlan: WeeklyProductionPlan) => {
+  const handleSavePlan = async (updatedPlan: WeeklyProductionPlan) => {
     setActivePlan(updatedPlan);
     setActivePlanId(updatedPlan.id);
+    setPlans(prev => {
+      const idx = prev.findIndex(p => p.id === updatedPlan.id);
+      return idx >= 0 ? prev.map(p => p.id === updatedPlan.id ? updatedPlan : p) : [...prev, updatedPlan];
+    });
+
+    await saveProductionPlan(updatedPlan);
     const currentPlans = getStoredPlans();
     const idx = currentPlans.findIndex(p => p.id === updatedPlan.id);
     const newPlans = idx >= 0 
       ? currentPlans.map(p => p.id === updatedPlan.id ? updatedPlan : p)
       : [...currentPlans, updatedPlan];
-    setPlans(newPlans);
     saveStoredPlans(newPlans);
   };
 
-  const handleSelectPlan = (plan: WeeklyProductionPlan) => {
+  const handleSelectPlan = async (plan: WeeklyProductionPlan) => {
     setActivePlan(plan);
     setActivePlanId(plan.id);
+    await setActivePlanOnServer(plan.id);
   };
 
-  const handleUpdateSKUs = (newSkus: ProductSKU[]) => {
+  const handleUpdateSKUs = async (newSkus: ProductSKU[]) => {
     setSkus(newSkus);
     saveStoredSKUs(newSkus);
+    await saveSKUsToServer(newSkus);
   };
 
-  const handleRefresh = () => {
-    setSkus(getStoredSKUs());
-    setPlans(getStoredPlans());
-    setActivePlan(getActivePlan());
-    setLogs(getStoredLogs());
+  const handleRefresh = async () => {
+    const serverData = await fetchInitialData();
+    if (serverData) {
+      setSkus(serverData.skus);
+      setPlans(serverData.plans);
+      setActivePlan(serverData.activePlan);
+      setLogs(serverData.logs);
+    }
   };
 
   // Calculate summary based on week filter
