@@ -1,69 +1,181 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useEffect } from 'react';
+import { 
+  ProductSKU, 
+  WeeklyProductionPlan, 
+  DailyProductionLog, 
+  WeeklySummary 
+} from '@/types';
+import { 
+  getStoredSKUs, 
+  saveStoredSKUs, 
+  getStoredPlans, 
+  saveStoredPlans, 
+  getActivePlan, 
+  getStoredLogs, 
+  saveStoredLogs, 
+  addDailyLog, 
+  deleteDailyLog, 
+  calculateWeeklySummary 
+} from '@/lib/storage';
+import { Navbar } from '@/components/layout/Navbar';
+import { BottomNav, NavTab } from '@/components/layout/BottomNav';
+import { SummaryDashboard } from '@/components/dashboard/SummaryDashboard';
+import { QuickInputForm } from '@/components/production/QuickInputForm';
+import { WeeklyPlanManager } from '@/components/planning/WeeklyPlanManager';
+import { WeeklyReport } from '@/components/reports/WeeklyReport';
+import { GoogleSheetSync } from '@/components/master/GoogleSheetSync';
+import { INITIAL_PLAN, DEFAULT_SKUS, INITIAL_LOGS } from '@/lib/mockData';
+
+export default function HomePage() {
+  const [isClientLoaded, setIsClientLoaded] = useState(false);
+  const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const [isMobileFrame, setIsMobileFrame] = useState(false);
+
+  // Core States
+  const [skus, setSkus] = useState<ProductSKU[]>(DEFAULT_SKUS);
+  const [activePlan, setActivePlan] = useState<WeeklyProductionPlan>(INITIAL_PLAN);
+  const [logs, setLogs] = useState<DailyProductionLog[]>(INITIAL_LOGS);
+
+  // Initialize from storage on mount
+  useEffect(() => {
+    const loadedSkus = getStoredSKUs();
+    const loadedPlan = getActivePlan();
+    const loadedLogs = getStoredLogs();
+
+    setSkus(loadedSkus);
+    setActivePlan(loadedPlan);
+    setLogs(loadedLogs);
+    setIsClientLoaded(true);
+  }, []);
+
+  // Handlers
+  const handleSaveLog = (newLogData: Omit<DailyProductionLog, 'id' | 'created_at'>) => {
+    const created = addDailyLog(newLogData);
+    setLogs(prev => [created, ...prev]);
+  };
+
+  const handleDeleteLog = (id: string) => {
+    deleteDailyLog(id);
+    setLogs(prev => prev.filter(l => l.id !== id));
+  };
+
+  const handleSavePlan = (updatedPlan: WeeklyProductionPlan) => {
+    setActivePlan(updatedPlan);
+    const plans = getStoredPlans();
+    const idx = plans.findIndex(p => p.id === updatedPlan.id);
+    const newPlans = idx >= 0 
+      ? plans.map(p => p.id === updatedPlan.id ? updatedPlan : p)
+      : [...plans, updatedPlan];
+    saveStoredPlans(newPlans);
+  };
+
+  const handleUpdateSKUs = (newSkus: ProductSKU[]) => {
+    setSkus(newSkus);
+    saveStoredSKUs(newSkus);
+  };
+
+  const handleRefresh = () => {
+    setSkus(getStoredSKUs());
+    setActivePlan(getActivePlan());
+    setLogs(getStoredLogs());
+  };
+
+  // Calculate current summary
+  const summary: WeeklySummary = calculateWeeklySummary(activePlan, logs);
+
+  if (!isClientLoaded) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 to-amber-500 animate-pulse flex items-center justify-center mb-3">
+          <span className="text-xl font-black">PC</span>
+        </div>
+        <p className="text-sm text-slate-400 font-medium">Memuat PlanCraft Daging Frozen...</p>
+      </div>
+    );
+  }
+
+  // Content renderer
+  const renderTabContent = () => {
+    switch (currentTab) {
+      case 'dashboard':
+        return (
+          <SummaryDashboard
+            plan={activePlan}
+            logs={logs}
+            summary={summary}
+            onNavigateToInput={() => setCurrentTab('input')}
+            onNavigateToPlanning={() => setCurrentTab('planning')}
+          />
+        );
+      case 'input':
+        return (
+          <QuickInputForm
+            plan={activePlan}
+            skus={skus}
+            logs={logs}
+            onSaveLog={handleSaveLog}
+            onDeleteLog={handleDeleteLog}
+          />
+        );
+      case 'planning':
+        return (
+          <WeeklyPlanManager
+            plan={activePlan}
+            skus={skus}
+            onSavePlan={handleSavePlan}
+          />
+        );
+      case 'reports':
+        return (
+          <WeeklyReport
+            plan={activePlan}
+            logs={logs}
+            summary={summary}
+          />
+        );
+      case 'skus':
+        return (
+          <GoogleSheetSync
+            skus={skus}
+            onUpdateSKUs={handleUpdateSKUs}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className={`min-h-screen bg-slate-950 flex flex-col ${isMobileFrame ? 'p-0 md:p-6 md:bg-slate-900/60' : ''}`}>
+      {/* Wrapper - Either normal responsive or phone frame simulation */}
+      <div
+        className={`flex-1 flex flex-col mx-auto w-full transition-all duration-300 ${
+          isMobileFrame
+            ? 'max-w-md bg-slate-950 md:rounded-[40px] md:border-[10px] md:border-slate-800 md:shadow-2xl md:overflow-hidden relative min-h-[844px]'
+            : 'max-w-4xl'
+        }`}
+      >
+        {/* Navbar */}
+        <Navbar
+          activePlan={activePlan}
+          isMobileFrame={isMobileFrame}
+          setIsMobileFrame={setIsMobileFrame}
+          onRefresh={handleRefresh}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        {/* Main Content Area */}
+        <main className="flex-1 px-3.5 sm:px-6 py-4 overflow-y-auto">
+          {renderTabContent()}
+        </main>
+
+        {/* Bottom Navigation for Mobile */}
+        <BottomNav
+          currentTab={currentTab}
+          setCurrentTab={setCurrentTab}
+        />
+      </div>
     </div>
   );
 }
