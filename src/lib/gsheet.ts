@@ -1,6 +1,7 @@
 import { ProductSKU } from '@/types';
 
-export const DEFAULT_GSHEET_ID = '1Dpe2Z8s3OcAJVN65vjGr2E_C2gR3UBPe946kG1GLR28';
+export const DEFAULT_GSHEET_ID =
+  process.env.NEXT_PUBLIC_DEFAULT_GSHEET_ID || '1Dpe2Z8s3OcAJVN65vjGr2E_C2gR3UBPe946kG1GLR28';
 
 /**
  * Extracts Google Sheet ID from full URL or returns ID as is
