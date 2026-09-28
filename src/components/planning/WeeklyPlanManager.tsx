@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   WeeklyProductionPlan, 
   ProductSKU, 
@@ -13,8 +13,8 @@ import {
   Trash2, 
   Save, 
   CheckCircle2, 
-  Sparkles,
-  Calculator,
+  Search,
+  X,
   Calendar
 } from 'lucide-react';
 
@@ -34,27 +34,37 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   const [year, setYear] = useState(plan.year);
   const [startDate, setStartDate] = useState(plan.start_date);
   const [endDate, setEndDate] = useState(plan.end_date);
-  const [workingDays, setWorkingDays] = useState(plan.working_days || 6);
   const [notes, setNotes] = useState(plan.notes || '');
   const [targets, setTargets] = useState<WeeklyTargetItem[]>(plan.targets);
 
-  const [selectedSkuToAdd, setSelectedSkuToAdd] = useState<string>('');
+  // Search & add new item state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedSkuToAdd, setSelectedSkuToAdd] = useState<ProductSKU | null>(null);
   const [newTargetKg, setNewTargetKg] = useState<string>('500');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  // Calculate total target
+  // Total target
   const totalTargetKg = targets.reduce((sum, item) => sum + (item.target_kg || 0), 0);
-  const totalDailyTargetKg = workingDays > 0 ? totalTargetKg / workingDays : 0;
+
+  // Filter unassigned SKUs matching query
+  const targetIdSet = useMemo(() => new Set(targets.map(t => t.sku_id)), [targets]);
+
+  const filteredAvailableSkus = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return skus
+      .filter(s => !targetIdSet.has(s.id))
+      .filter(s => !q || s.name.toLowerCase().includes(q) || s.sku_code.toLowerCase().includes(q))
+      .slice(0, 60); // limit for fast and smooth scrolling
+  }, [skus, targetIdSet, searchQuery]);
 
   // Handle target kg change for existing item
   const handleUpdateTargetKg = (skuId: string, val: number) => {
     const updated = targets.map((t) => {
       if (t.sku_id === skuId) {
-        const kg = isNaN(val) ? 0 : val;
         return {
           ...t,
-          target_kg: kg,
-          daily_target_kg: workingDays > 0 ? Math.round((kg / workingDays) * 10) / 10 : 0,
+          target_kg: isNaN(val) ? 0 : val,
         };
       }
       return t;
@@ -70,32 +80,23 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   // Add new SKU to target list
   const handleAddTarget = () => {
     if (!selectedSkuToAdd) {
-      alert('Pilih SKU yang ingin ditambahkan terlebih dahulu.');
-      return;
-    }
-
-    const sku = skus.find(s => s.id === selectedSkuToAdd);
-    if (!sku) return;
-
-    if (targets.some(t => t.sku_id === sku.id)) {
-      alert('SKU ini sudah ada dalam daftar target minggu ini.');
+      alert('Pilih barang terlebih dahulu.');
       return;
     }
 
     const kg = parseFloat(newTargetKg) || 100;
-    const daily = workingDays > 0 ? Math.round((kg / workingDays) * 10) / 10 : 0;
 
     const newItem: WeeklyTargetItem = {
-      sku_id: sku.id,
-      sku_code: sku.sku_code,
-      sku_name: sku.name,
-      category: sku.category,
+      sku_id: selectedSkuToAdd.id,
+      sku_code: selectedSkuToAdd.sku_code,
+      sku_name: selectedSkuToAdd.name,
+      category: selectedSkuToAdd.category,
       target_kg: kg,
-      daily_target_kg: daily,
     };
 
     setTargets([...targets, newItem]);
-    setSelectedSkuToAdd('');
+    setSelectedSkuToAdd(null);
+    setSearchQuery('');
     setNewTargetKg('500');
   };
 
@@ -114,7 +115,6 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       year: Number(year),
       start_date: startDate,
       end_date: endDate,
-      working_days: Number(workingDays),
       notes,
       targets,
     };
@@ -123,9 +123,6 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3500);
   };
-
-  // Available SKUs not yet in targets
-  const unassignedSkus = skus.filter(s => !targets.some(t => t.sku_id === s.id));
 
   return (
     <div className="space-y-4 pb-24">
@@ -137,7 +134,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
             Perencanaan Produksi Mingguan
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Atur kuota target mingguan (Kg) per jenis potongan daging frozen.
+            Atur kuota target mingguan (Kg) per jenis barang/SKU dari database.
           </p>
         </div>
       </div>
@@ -157,8 +154,8 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
             Informasi Periode Produksi
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1">
                 Judul Rencana
               </label>
@@ -171,42 +168,26 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Minggu Ke-
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="53"
-                  value={weekNumber}
-                  onChange={(e) => setWeekNumber(Number(e.target.value))}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Hari Kerja (Shift 1)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="7"
-                  value={workingDays}
-                  onChange={(e) => setWorkingDays(Number(e.target.value))}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">
+                Minggu Ke-
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="53"
+                value={weekNumber}
+                onChange={(e) => setWeekNumber(Number(e.target.value))}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">
-                Mulai (Senin)
+                Tanggal Mulai
               </label>
               <input
                 type="date"
@@ -218,7 +199,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">
-                Selesai (Sabtu)
+                Tanggal Selesai
               </label>
               <input
                 type="date"
@@ -232,13 +213,13 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">
-              Catatan / Instruksi Produksi
+              Catatan / Instruksi
             </label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Utamakan pemenuhan pesanan shabu-shabu di awal pekan."
+              placeholder="Contoh: Utamakan pemenuhan pesanan slice dan giling."
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:ring-2 focus:ring-rose-500 focus:outline-none"
             />
           </div>
@@ -248,20 +229,147 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
         <div className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 border border-rose-900/30 rounded-2xl p-4 flex items-center justify-between">
           <div>
             <span className="text-[11px] text-slate-400 uppercase font-semibold">
-              Total Komitmen Rencana
+              Total Target Rencana
             </span>
-            <p className="text-xl sm:text-2xl font-black text-white mt-0.5">
+            <p className="text-2xl font-black text-white mt-0.5">
               {formatKg(totalTargetKg)} <span className="text-xs font-normal text-slate-400">Kg / Minggu</span>
             </p>
           </div>
           <div className="text-right">
-            <span className="text-[11px] text-slate-400 flex items-center justify-end gap-1">
-              <Calculator className="w-3 h-3 text-rose-400" />
-              Rata-rata Target Harian
-            </span>
+            <span className="text-xs text-slate-400">Jumlah Barang Terjadwal</span>
             <p className="text-base font-bold text-rose-400 mt-0.5">
-              {formatKg(totalDailyTargetKg)} <span className="text-xs font-normal text-slate-400">Kg / Hari</span>
+              {targets.length} SKU
             </p>
+          </div>
+        </div>
+
+        {/* Add SKU to Targets Section (Custom Searchable Combobox) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+          <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            + Tambah Barang ke Plan Minggu Ini
+          </h2>
+
+          <div className="space-y-2">
+            {selectedSkuToAdd ? (
+              <div className="bg-slate-950 border border-rose-500/50 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 font-semibold">
+                      {selectedSkuToAdd.sku_code}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                      {selectedSkuToAdd.category}
+                    </span>
+                  </div>
+                  <h3 className="text-xs font-bold text-white mt-1 truncate">
+                    {selectedSkuToAdd.name}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="10"
+                      value={newTargetKg}
+                      onChange={(e) => setNewTargetKg(e.target.value)}
+                      placeholder="Target Kg"
+                      className="w-28 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white text-right focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                      Kg
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddTarget}
+                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Tambah
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSkuToAdd(null)}
+                    className="p-2 text-slate-400 hover:text-white"
+                    title="Batal pilih"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Ketik nama barang atau kode SKU untuk mencari..."
+                    value={searchQuery}
+                    onFocus={() => setIsDropdownOpen(true)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-rose-500 rounded-xl pl-9 pr-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Floating Dark Dropdown Panel */}
+                {isDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-slate-950 border border-slate-700 rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-800">
+                    {filteredAvailableSkus.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-500 text-center">
+                        Tidak ada barang yang cocok atau barang sudah ada di daftar.
+                      </div>
+                    ) : (
+                      filteredAvailableSkus.map((sku) => (
+                        <button
+                          type="button"
+                          key={sku.id}
+                          onClick={() => {
+                            setSelectedSkuToAdd(sku);
+                            setIsDropdownOpen(false);
+                          }}
+                          className="w-full text-left p-2.5 hover:bg-slate-800 transition flex items-center justify-between group active:bg-slate-700"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-900 text-slate-300">
+                                {sku.sku_code}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
+                                {sku.category}
+                              </span>
+                              {sku.specs && (
+                                <span className="text-[10px] text-slate-500">
+                                  {sku.specs}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs font-semibold text-slate-200 group-hover:text-white mt-1 truncate">
+                              {sku.name}
+                            </p>
+                          </div>
+                          <Plus className="w-4 h-4 text-slate-500 group-hover:text-rose-400 shrink-0" />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -269,15 +377,15 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Daftar Target Item Daging ({targets.length} Item)
+              Daftar Target Item ({targets.length} Item)
             </h2>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {targets.map((item) => (
               <div
                 key={item.sku_id}
-                className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
                   <div className="flex items-center space-x-1.5">
@@ -288,30 +396,21 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                       {item.category}
                     </span>
                   </div>
-                  <h3 className="text-xs font-bold text-white mt-1">
+                  <h3 className="text-xs font-bold text-white mt-1 truncate">
                     {item.sku_name}
                   </h3>
                 </div>
 
-                <div className="flex items-center space-x-3 shrink-0">
-                  <div className="text-right">
-                    <label className="block text-[10px] text-slate-500">Target Mingguan (Kg)</label>
-                    <div className="relative mt-0.5">
-                      <input
-                        type="number"
-                        step="10"
-                        value={item.target_kg}
-                        onChange={(e) => handleUpdateTargetKg(item.sku_id, parseFloat(e.target.value))}
-                        className="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-white text-right focus:ring-1 focus:ring-rose-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="text-right hidden sm:block">
-                    <label className="block text-[10px] text-slate-500">Harian (~)</label>
-                    <span className="text-xs font-medium text-slate-400 inline-block py-1">
-                      {formatKg(item.daily_target_kg)} Kg
-                    </span>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="10"
+                      value={item.target_kg}
+                      onChange={(e) => handleUpdateTargetKg(item.sku_id, parseFloat(e.target.value))}
+                      className="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold text-white text-right focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-500 ml-1">Kg</span>
                   </div>
 
                   <button
@@ -326,48 +425,6 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
               </div>
             ))}
           </div>
-
-          {/* Add SKU to Targets Section */}
-          {unassignedSkus.length > 0 && (
-            <div className="pt-3 border-t border-slate-800/80">
-              <label className="block text-xs font-semibold text-slate-300 mb-2">
-                + Tambah Item Daging Lain ke Minggu Ini
-              </label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <select
-                  value={selectedSkuToAdd}
-                  onChange={(e) => setSelectedSkuToAdd(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
-                >
-                  <option value="">-- Pilih SKU dari Database --</option>
-                  {unassignedSkus.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      [{s.sku_code}] {s.name} ({s.category})
-                    </option>
-                  ))}
-                </select>
-
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    step="10"
-                    placeholder="Target (Kg)"
-                    value={newTargetKg}
-                    onChange={(e) => setNewTargetKg(e.target.value)}
-                    className="w-28 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white text-right focus:ring-1 focus:ring-rose-500 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddTarget}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition active:scale-95 flex items-center gap-1 shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Tambah
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Action Save Button */}

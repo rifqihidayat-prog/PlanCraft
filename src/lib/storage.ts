@@ -136,26 +136,31 @@ export function saveStoredGSheetId(id: string): void {
   localStorage.setItem(STORAGE_KEYS.GSHEET_ID, id);
 }
 
+/**
+ * Calculates summary for a specific plan or across all plans
+ */
 export function calculateWeeklySummary(
-  plan: WeeklyProductionPlan,
+  targetPlans: WeeklyProductionPlan[],
   logs: DailyProductionLog[]
 ): WeeklySummary {
-  const planLogs = logs.filter(l => l.plan_id === plan.id);
+  const planIds = new Set(targetPlans.map(p => p.id));
+  const relevantLogs = logs.filter(l => planIds.has(l.plan_id));
 
-  const total_target_kg = plan.targets.reduce((acc, curr) => acc + (curr.target_kg || 0), 0);
-  const total_actual_kg = planLogs.reduce((acc, curr) => acc + (curr.actual_kg || 0), 0);
-  const total_trimming_kg = planLogs.reduce((acc, curr) => acc + (curr.trimming_loss_kg || 0), 0);
+  // Sum all targets from the selected plans
+  let total_target_kg = 0;
+  targetPlans.forEach(plan => {
+    plan.targets.forEach(t => {
+      total_target_kg += t.target_kg || 0;
+    });
+  });
+
+  const total_actual_kg = relevantLogs.reduce((acc, curr) => acc + (curr.actual_kg || 0), 0);
 
   const achievement_rate = total_target_kg > 0 
     ? Math.round((total_actual_kg / total_target_kg) * 1000) / 10 
     : 0;
 
   const remaining_target_kg = Math.max(0, Math.round((total_target_kg - total_actual_kg) * 10) / 10);
-
-  const total_processed_meat = total_actual_kg + total_trimming_kg;
-  const yield_rate = total_processed_meat > 0 
-    ? Math.round((total_actual_kg / total_processed_meat) * 1000) / 10 
-    : 100;
 
   let status: 'on_track' | 'warning' | 'behind' = 'on_track';
   if (achievement_rate < 80) {
@@ -165,12 +170,10 @@ export function calculateWeeklySummary(
   }
 
   return {
-    total_target_kg,
+    total_target_kg: Math.round(total_target_kg * 10) / 10,
     total_actual_kg: Math.round(total_actual_kg * 10) / 10,
-    total_trimming_kg: Math.round(total_trimming_kg * 10) / 10,
     achievement_rate,
     remaining_target_kg,
-    yield_rate,
     status,
   };
 }
@@ -184,14 +187,4 @@ export function formatKg(val: number): string {
 
 export function formatPercent(val: number): string {
   return `${val.toFixed(1)}%`;
-}
-
-export function getIndonesianDayName(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    return days[d.getDay()];
-  } catch {
-    return '';
-  }
 }

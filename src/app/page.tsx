@@ -35,16 +35,20 @@ export default function HomePage() {
 
   // Core States
   const [skus, setSkus] = useState<ProductSKU[]>(DEFAULT_SKUS);
+  const [plans, setPlans] = useState<WeeklyProductionPlan[]>([INITIAL_PLAN]);
   const [activePlan, setActivePlan] = useState<WeeklyProductionPlan>(INITIAL_PLAN);
+  const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>('all');
   const [logs, setLogs] = useState<DailyProductionLog[]>(INITIAL_LOGS);
 
   // Initialize from storage on mount
   useEffect(() => {
     const loadedSkus = getStoredSKUs();
+    const loadedPlans = getStoredPlans();
     const loadedPlan = getActivePlan();
     const loadedLogs = getStoredLogs();
 
     setSkus(loadedSkus);
+    setPlans(loadedPlans);
     setActivePlan(loadedPlan);
     setLogs(loadedLogs);
     setIsClientLoaded(true);
@@ -63,11 +67,12 @@ export default function HomePage() {
 
   const handleSavePlan = (updatedPlan: WeeklyProductionPlan) => {
     setActivePlan(updatedPlan);
-    const plans = getStoredPlans();
-    const idx = plans.findIndex(p => p.id === updatedPlan.id);
+    const currentPlans = getStoredPlans();
+    const idx = currentPlans.findIndex(p => p.id === updatedPlan.id);
     const newPlans = idx >= 0 
-      ? plans.map(p => p.id === updatedPlan.id ? updatedPlan : p)
-      : [...plans, updatedPlan];
+      ? currentPlans.map(p => p.id === updatedPlan.id ? updatedPlan : p)
+      : [...currentPlans, updatedPlan];
+    setPlans(newPlans);
     saveStoredPlans(newPlans);
   };
 
@@ -78,12 +83,20 @@ export default function HomePage() {
 
   const handleRefresh = () => {
     setSkus(getStoredSKUs());
+    setPlans(getStoredPlans());
     setActivePlan(getActivePlan());
     setLogs(getStoredLogs());
   };
 
-  // Calculate current summary
-  const summary: WeeklySummary = calculateWeeklySummary(activePlan, logs);
+  // Calculate summary based on week filter
+  const targetPlansForSummary = selectedWeekFilter === 'all'
+    ? plans
+    : plans.filter(p => p.id === selectedWeekFilter);
+
+  const summary: WeeklySummary = calculateWeeklySummary(
+    targetPlansForSummary.length > 0 ? targetPlansForSummary : [activePlan],
+    logs
+  );
 
   if (!isClientLoaded) {
     return (
@@ -102,7 +115,10 @@ export default function HomePage() {
       case 'dashboard':
         return (
           <SummaryDashboard
-            plan={activePlan}
+            plans={plans}
+            selectedWeekFilter={selectedWeekFilter}
+            onSelectWeekFilter={setSelectedWeekFilter}
+            activePlan={activePlan}
             logs={logs}
             summary={summary}
             onNavigateToInput={() => setCurrentTab('input')}

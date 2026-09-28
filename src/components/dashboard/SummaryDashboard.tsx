@@ -13,16 +13,18 @@ import {
   CheckCircle2, 
   Target, 
   Scale, 
-  Scissors, 
   Flame, 
   Calendar,
   ChevronRight,
-  Sparkles,
+  Filter,
   ArrowUpRight
 } from 'lucide-react';
 
 interface SummaryDashboardProps {
-  plan: WeeklyProductionPlan;
+  plans: WeeklyProductionPlan[];
+  selectedWeekFilter: string; // 'all' or plan.id
+  onSelectWeekFilter: (val: string) => void;
+  activePlan: WeeklyProductionPlan;
   logs: DailyProductionLog[];
   summary: WeeklySummary;
   onNavigateToInput: () => void;
@@ -30,20 +32,22 @@ interface SummaryDashboardProps {
 }
 
 export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
-  plan,
+  plans,
+  selectedWeekFilter,
+  onSelectWeekFilter,
+  activePlan,
   logs,
   summary,
   onNavigateToInput,
   onNavigateToPlanning,
 }) => {
+  const isAllWeeks = selectedWeekFilter === 'all';
+  const currentPlan = isAllWeeks ? activePlan : (plans.find(p => p.id === selectedWeekFilter) || activePlan);
+
   // Today's stats
   const todayStr = new Date().toISOString().split('T')[0];
   const todayLogs = logs.filter(l => l.date === todayStr);
   const todayActualKg = todayLogs.reduce((acc, curr) => acc + curr.actual_kg, 0);
-  
-  // Calculate average daily target
-  const dailyTargetSum = plan.targets.reduce((acc, curr) => acc + curr.daily_target_kg, 0);
-  const todayAchievement = dailyTargetSum > 0 ? (todayActualKg / dailyTargetSum) * 100 : 0;
 
   // Status badge config
   const getStatusBadge = () => {
@@ -52,7 +56,6 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
         icon: CheckCircle2,
         label: 'On Track',
-        desc: 'Produksi berjalan sesuai target',
       };
     }
     if (summary.status === 'warning') {
@@ -60,63 +63,95 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         bg: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
         icon: AlertTriangle,
         label: 'Perlu Perhatian',
-        desc: 'Mendekati target, jaga ritme potong',
       };
     }
     return {
       bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
       icon: Flame,
       label: 'Tertinggal',
-      desc: 'Kecepatan produksi perlu dinaikkan',
     };
   };
 
   const statusBadge = getStatusBadge();
   const StatusIcon = statusBadge.icon;
 
-  // SKU progress calculations
-  const skuProgress = plan.targets.map(target => {
-    const skuLogs = logs.filter(l => l.plan_id === plan.id && l.sku_id === target.sku_id);
-    const actual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
-    const percent = target.target_kg > 0 ? (actual / target.target_kg) * 100 : 0;
-    const remaining = Math.max(0, target.target_kg - actual);
-    return {
-      ...target,
-      actual_kg: Math.round(actual * 10) / 10,
-      percent: Math.round(percent * 10) / 10,
-      remaining_kg: Math.round(remaining * 10) / 10,
-    };
-  });
+  // Aggregate targets across all or selected plans for SKU breakdown
+  const targetSkuList = React.useMemo(() => {
+    const plansToConsider = isAllWeeks ? plans : [currentPlan];
+    const map = new Map<string, {
+      sku_id: string;
+      sku_code: string;
+      sku_name: string;
+      category: string;
+      target_kg: number;
+    }>();
+
+    plansToConsider.forEach(p => {
+      p.targets.forEach(t => {
+        if (!map.has(t.sku_id)) {
+          map.set(t.sku_id, {
+            sku_id: t.sku_id,
+            sku_code: t.sku_code,
+            sku_name: t.sku_name,
+            category: t.category,
+            target_kg: t.target_kg,
+          });
+        } else {
+          const existing = map.get(t.sku_id)!;
+          existing.target_kg += t.target_kg;
+        }
+      });
+    });
+
+    const relevantPlanIds = new Set(plansToConsider.map(p => p.id));
+    const filteredLogs = logs.filter(l => relevantPlanIds.has(l.plan_id));
+
+    return Array.from(map.values()).map(target => {
+      const skuLogs = filteredLogs.filter(l => l.sku_id === target.sku_id);
+      const actual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
+      const percent = target.target_kg > 0 ? (actual / target.target_kg) * 100 : 0;
+      const remaining = Math.max(0, target.target_kg - actual);
+      return {
+        ...target,
+        actual_kg: Math.round(actual * 10) / 10,
+        percent: Math.round(percent * 10) / 10,
+        remaining_kg: Math.round(remaining * 10) / 10,
+      };
+    });
+  }, [isAllWeeks, plans, currentPlan, logs]);
 
   return (
     <div className="space-y-4 pb-20">
-      {/* Plan Header Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-              Minggu Ke-{plan.week_number}
-            </span>
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-slate-500" />
-              {plan.start_date} s/d {plan.end_date}
-            </span>
-          </div>
-          <button
-            onClick={onNavigateToPlanning}
-            className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center"
-          >
-            Ubah Plan <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
-          </button>
+      {/* Week Filter Bar */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-300">
+          <Filter className="w-4 h-4 text-rose-500" />
+          <span>Filter Periode Produksi:</span>
         </div>
-        <h1 className="text-base sm:text-lg font-bold text-white mt-1.5 line-clamp-1">
-          {plan.title}
-        </h1>
-        {plan.notes && (
-          <p className="text-xs text-slate-400 mt-1 italic line-clamp-1">
-            &ldquo;{plan.notes}&rdquo;
-          </p>
-        )}
+
+        <div className="flex items-center space-x-2">
+          <select
+            value={selectedWeekFilter}
+            onChange={(e) => onSelectWeekFilter(e.target.value)}
+            className="bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-rose-500 focus:outline-none cursor-pointer"
+          >
+            <option value="all">📊 Total Semua Week (Akumulasi)</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                Minggu Ke-{p.week_number} ({p.year}) - {p.start_date}
+              </option>
+            ))}
+          </select>
+
+          {!isAllWeeks && (
+            <button
+              onClick={onNavigateToPlanning}
+              className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
+            >
+              Ubah Plan <ChevronRight className="w-3 h-3 ml-0.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Hero Achievement Card */}
@@ -126,7 +161,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         <div className="flex items-center justify-between mb-4">
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Total Pencapaian Pekan Ini
+              {isAllWeeks ? 'Pencapaian Akumulasi Semua Week' : `Pencapaian Minggu Ke-${currentPlan.week_number}`}
             </span>
             <div className="flex items-baseline space-x-2 mt-1">
               <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
@@ -165,14 +200,16 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
           </div>
         </div>
 
-        {/* 4-Box Key Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-800/80">
+        {/* 3-Box Key Metrics Grid (Tanpa Susut & Tanpa Yield) */}
+        <div className="grid grid-cols-3 gap-2.5 pt-3 border-t border-slate-800/80">
           <div className="bg-slate-950/50 rounded-xl p-2.5 border border-slate-800">
             <div className="flex items-center space-x-1.5 text-slate-400 text-[11px] mb-1">
               <Target className="w-3.5 h-3.5 text-rose-400" />
               <span>Target Rencana</span>
             </div>
-            <p className="text-sm font-bold text-white">{formatKg(summary.total_target_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span></p>
+            <p className="text-sm sm:text-base font-bold text-white">
+              {formatKg(summary.total_target_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span>
+            </p>
           </div>
 
           <div className="bg-slate-950/50 rounded-xl p-2.5 border border-slate-800">
@@ -180,23 +217,19 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
               <Scale className="w-3.5 h-3.5 text-emerald-400" />
               <span>Total Hasil Jadi</span>
             </div>
-            <p className="text-sm font-bold text-emerald-400">{formatKg(summary.total_actual_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span></p>
+            <p className="text-sm sm:text-base font-bold text-emerald-400">
+              {formatKg(summary.total_actual_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span>
+            </p>
           </div>
 
           <div className="bg-slate-950/50 rounded-xl p-2.5 border border-slate-800">
             <div className="flex items-center space-x-1.5 text-slate-400 text-[11px] mb-1">
-              <Scissors className="w-3.5 h-3.5 text-amber-400" />
-              <span>Susut/Trimming</span>
+              <Flame className="w-3.5 h-3.5 text-amber-400" />
+              <span>Sisa Target</span>
             </div>
-            <p className="text-sm font-bold text-amber-400">{formatKg(summary.total_trimming_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span></p>
-          </div>
-
-          <div className="bg-slate-950/50 rounded-xl p-2.5 border border-slate-800">
-            <div className="flex items-center space-x-1.5 text-slate-400 text-[11px] mb-1">
-              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              <span>Rendemen (Yield)</span>
-            </div>
-            <p className="text-sm font-bold text-blue-400">{formatPercent(summary.yield_rate)}</p>
+            <p className="text-sm sm:text-base font-bold text-rose-400">
+              {formatKg(summary.remaining_target_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span>
+            </p>
           </div>
         </div>
       </div>
@@ -206,56 +239,45 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <h2 className="text-sm font-bold text-white">Performa Produksi Hari Ini</h2>
+            <h2 className="text-sm font-bold text-white">Realisasi Hari Ini ({todayStr})</h2>
           </div>
-          <span className="text-xs text-slate-400">{todayStr}</span>
+          <span className="text-xs text-slate-400">{todayLogs.length} Entri</span>
         </div>
 
         <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 flex items-center justify-between">
           <div>
-            <p className="text-[11px] text-slate-400">Hasil Jadi Hari Ini</p>
-            <p className="text-xl font-extrabold text-white">
-              {formatKg(todayActualKg)} <span className="text-xs text-slate-400 font-normal">/ {formatKg(dailyTargetSum)} Kg</span>
+            <p className="text-[11px] text-slate-400">Total Hasil Produksi Jadi Hari Ini</p>
+            <p className="text-2xl font-black text-emerald-400 mt-0.5">
+              {formatKg(todayActualKg)} <span className="text-xs text-slate-400 font-normal">Kg</span>
             </p>
           </div>
-          <div className="text-right">
-            <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold ${
-              todayAchievement >= 100 
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                : 'bg-slate-800 text-slate-300'
-            }`}>
-              {formatPercent(todayAchievement)}
-            </span>
-          </div>
+          <button
+            onClick={onNavigateToInput}
+            className="py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md transition"
+          >
+            <span>+ Input Hasil</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </button>
         </div>
-
-        {/* Quick CTA to input */}
-        <button
-          onClick={onNavigateToInput}
-          className="mt-3 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-600 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-lg shadow-rose-950/30 active:scale-[0.98] transition"
-        >
-          <span>+ Catat Hasil Produksi Baru</span>
-          <ArrowUpRight className="w-4 h-4" />
-        </button>
       </div>
 
-      {/* Breakdown Capaian per SKU */}
+      {/* Detail Capaian per SKU */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 text-rose-400" />
-            Detail Capaian per SKU Daging
+            Detail Pencapaian per Barang / SKU
           </h2>
-          <span className="text-xs text-slate-400">{skuProgress.length} Item</span>
+          <span className="text-xs text-slate-400">{targetSkuList.length} Item</span>
         </div>
 
         <div className="space-y-3">
-          {skuProgress.length === 0 ? (
+          {targetSkuList.length === 0 ? (
             <p className="text-xs text-slate-500 py-4 text-center">
-              Belum ada target SKU di minggu ini. Klik Ubah Plan untuk menambahkan.
+              Belum ada target barang pada periode ini. Buka menu Plan untuk menambahkan barang.
             </p>
           ) : (
-            skuProgress.map((item) => {
+            targetSkuList.map((item) => {
               const isFinished = item.percent >= 100;
               return (
                 <div

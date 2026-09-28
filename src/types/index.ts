@@ -14,7 +14,7 @@ export interface WeeklyTargetItem {
   sku_code: string;
   category: string;
   target_kg: number;
-  daily_target_kg: number;
+  daily_target_kg?: number;
 }
 
 export interface DailyProductionLog {
@@ -39,7 +39,7 @@ export interface WeeklyProductionPlan {
   start_date: string; // YYYY-MM-DD
   end_date: string;   // YYYY-MM-DD
   status: 'active' | 'completed' | 'draft';
-  working_days: number; // default 6 (Senin - Sabtu)
+  working_days?: number;
   targets: WeeklyTargetItem[];
   notes?: string;
 }
@@ -47,10 +47,8 @@ export interface WeeklyProductionPlan {
 export interface WeeklySummary {
   total_target_kg: number;
   total_actual_kg: number;
-  total_trimming_kg: number;
   achievement_rate: number; // percentage
   remaining_target_kg: number;
-  yield_rate: number; // percentage
   status: 'on_track' | 'warning' | 'behind';
 }
 

@@ -9,11 +9,7 @@ import {
 import { formatKg, formatPercent } from '@/lib/storage';
 import { 
   BarChart3, 
-  Download, 
   Printer, 
-  CheckCircle2, 
-  AlertTriangle,
-  Flame,
   FileSpreadsheet
 } from 'lucide-react';
 
@@ -55,13 +51,11 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
   };
 
   const weekDates = getDatesBetween(plan.start_date, plan.end_date);
-
-  // Group logs by SKU and by Date
   const planLogs = logs.filter(l => l.plan_id === plan.id);
+  const totalDiff = summary.total_actual_kg - summary.total_target_kg;
 
-  // Export CSV handler
+  // Export CSV handler (without susut and yield)
   const handleExportCSV = () => {
-    // Header
     const dateHeaders = weekDates.map(d => `${d.dayName} (${d.shortDate})`).join(',');
     let csv = `Laporan Realisasi Produksi PlanCraft - Minggu ${plan.week_number} (${plan.year})\n`;
     csv += `Periode: ${plan.start_date} s/d ${plan.end_date}\n\n`;
@@ -82,9 +76,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
       csv += `"${target.sku_code}","${target.sku_name}","${target.category}",${target.target_kg},${dailyValues},${totalActual.toFixed(1)},${diff.toFixed(1)},${pct.toFixed(1)}%\n`;
     });
 
-    csv += `\nTOTAL RINGKASAN,,,,${summary.total_target_kg},${summary.total_actual_kg},${(summary.total_actual_kg - summary.total_target_kg).toFixed(1)},${summary.achievement_rate}%\n`;
-    csv += `TOTAL SUSUT / TRIMMING (KG),,,,${summary.total_trimming_kg}\n`;
-    csv += `RENDEMEN / YIELD RATE (%),,,,${summary.yield_rate}%\n`;
+    csv += `\nTOTAL RINGKASAN,,,,${summary.total_target_kg},${summary.total_actual_kg},${totalDiff.toFixed(1)},${summary.achievement_rate}%\n`;
 
     // Download trigger
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -129,15 +121,25 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards (Tanpa Susut & Tanpa Yield) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
           <p className="text-[11px] text-slate-400">Target Pekan</p>
-          <p className="text-lg font-black text-white mt-0.5">{formatKg(summary.total_target_kg)} <span className="text-xs font-normal text-slate-400">Kg</span></p>
+          <p className="text-lg font-black text-white mt-0.5">
+            {formatKg(summary.total_target_kg)} <span className="text-xs font-normal text-slate-400">Kg</span>
+          </p>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
-          <p className="text-[11px] text-slate-400">Aktual Tercapai</p>
-          <p className="text-lg font-black text-emerald-400 mt-0.5">{formatKg(summary.total_actual_kg)} <span className="text-xs font-normal text-slate-400">Kg</span></p>
+          <p className="text-[11px] text-slate-400">Aktual Hasil Jadi</p>
+          <p className="text-lg font-black text-emerald-400 mt-0.5">
+            {formatKg(summary.total_actual_kg)} <span className="text-xs font-normal text-slate-400">Kg</span>
+          </p>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+          <p className="text-[11px] text-slate-400">Selisih Deviasi</p>
+          <p className={`text-lg font-black mt-0.5 ${totalDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {totalDiff >= 0 ? `+${formatKg(totalDiff)}` : formatKg(totalDiff)} <span className="text-xs font-normal text-slate-400">Kg</span>
+          </p>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
           <p className="text-[11px] text-slate-400">Pencapaian %</p>
@@ -147,23 +149,19 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
             {formatPercent(summary.achievement_rate)}
           </p>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
-          <p className="text-[11px] text-slate-400">Rendemen (Yield)</p>
-          <p className="text-lg font-black text-blue-400 mt-0.5">{formatPercent(summary.yield_rate)}</p>
-        </div>
       </div>
 
       {/* Daily Matrix Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm overflow-hidden">
         <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">
-          Matriks Realisasi Harian per SKU Daging
+          Matriks Realisasi Harian Hasil Jadi (Kg)
         </h2>
 
         <div className="overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/70 text-slate-400">
-                <th className="py-2.5 px-3 font-semibold min-w-[150px]">Produk Daging</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[150px]">Nama Barang / SKU</th>
                 <th className="py-2.5 px-2 font-semibold text-right">Target (Kg)</th>
                 {weekDates.map(d => (
                   <th key={d.dateStr} className="py-2.5 px-2 font-semibold text-right min-w-[55px]">
@@ -172,7 +170,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
                   </th>
                 ))}
                 <th className="py-2.5 px-2 font-semibold text-right bg-slate-900/90">Aktual</th>
-                <th className="py-2.5 px-2 font-semibold text-right bg-slate-900/90">Deviasi</th>
+                <th className="py-2.5 px-2 font-semibold text-right bg-slate-900/90">Selisih</th>
                 <th className="py-2.5 px-3 font-semibold text-right bg-slate-900/90">% Capaian</th>
               </tr>
             </thead>
@@ -229,11 +227,11 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
       {/* Field Bottlenecks and Log Issues */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
         <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5">
-          Catatan Lapangan & Kendala Mingguan
+          Catatan Lapangan & Kendala
         </h2>
         {planLogs.filter(l => l.notes || (l.bottleneck_reason && l.bottleneck_reason !== 'Normal / Lancar')).length === 0 ? (
           <p className="text-xs text-slate-500 py-3 text-center">
-            Semua proses berjalan normal tanpa kendala tercatat.
+            Semua proses produksi berjalan normal tanpa kendala.
           </p>
         ) : (
           <div className="space-y-2">
