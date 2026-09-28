@@ -20,7 +20,7 @@ import {
   deleteDailyLog, 
   calculateWeeklySummary 
 } from '@/lib/storage';
-import { getStoredUser, DEFAULT_ACCOUNTS } from '@/lib/auth';
+import { getStoredUser, logoutUser } from '@/lib/auth';
 import { Navbar } from '@/components/layout/Navbar';
 import { BottomNav, NavTab } from '@/components/layout/BottomNav';
 import { SummaryDashboard } from '@/components/dashboard/SummaryDashboard';
@@ -28,15 +28,14 @@ import { QuickInputForm } from '@/components/production/QuickInputForm';
 import { WeeklyPlanManager } from '@/components/planning/WeeklyPlanManager';
 import { WeeklyReport } from '@/components/reports/WeeklyReport';
 import { GoogleSheetSync } from '@/components/master/GoogleSheetSync';
-import { LoginModal } from '@/components/auth/LoginModal';
+import { LoginForm } from '@/components/auth/LoginForm';
 import { INITIAL_PLAN, DEFAULT_SKUS, INITIAL_LOGS } from '@/lib/mockData';
 
 export default function HomePage() {
   const [isClientLoaded, setIsClientLoaded] = useState(false);
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [isMobileFrame, setIsMobileFrame] = useState(false);
-  const [currentUser, setCurrentUser] = useState<AuthUser>(DEFAULT_ACCOUNTS[0]);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   // Core States
   const [skus, setSkus] = useState<ProductSKU[]>(DEFAULT_SKUS);
@@ -63,12 +62,17 @@ export default function HomePage() {
 
   // Proteksi Akses: Tim Produksi tidak boleh mengakses planning atau skus
   useEffect(() => {
-    if (currentUser.role === 'production' && (currentTab === 'planning' || currentTab === 'skus')) {
+    if (currentUser?.role === 'production' && (currentTab === 'planning' || currentTab === 'skus')) {
       setCurrentTab('dashboard');
     }
-  }, [currentUser.role, currentTab]);
+  }, [currentUser?.role, currentTab]);
 
   // Handlers
+  const handleLogout = () => {
+    logoutUser();
+    setCurrentUser(null);
+  };
+
   const handleSaveLog = (newLogData: Omit<DailyProductionLog, 'id' | 'created_at'>) => {
     const created = addDailyLog(newLogData);
     setLogs(prev => [created, ...prev]);
@@ -120,6 +124,18 @@ export default function HomePage() {
         </div>
         <p className="text-sm text-slate-400 font-medium">Memuat PlanCraft Daging Frozen...</p>
       </div>
+    );
+  }
+
+  // Jika belum login, tampilkan layar Login
+  if (!currentUser) {
+    return (
+      <LoginForm
+        onLogin={(user) => {
+          setCurrentUser(user);
+          setCurrentTab('dashboard');
+        }}
+      />
     );
   }
 
@@ -194,7 +210,7 @@ export default function HomePage() {
           isMobileFrame={isMobileFrame}
           setIsMobileFrame={setIsMobileFrame}
           onRefresh={handleRefresh}
-          onOpenLogin={() => setIsLoginModalOpen(true)}
+          onLogout={handleLogout}
         />
 
         {/* Main Content Area */}
@@ -207,19 +223,6 @@ export default function HomePage() {
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           userRole={currentUser.role}
-        />
-
-        {/* Modal Ganti Akun / Hak Akses */}
-        <LoginModal
-          currentUser={currentUser}
-          isOpen={isLoginModalOpen}
-          onClose={() => setIsLoginModalOpen(false)}
-          onUserChange={(newUser) => {
-            setCurrentUser(newUser);
-            if (newUser.role === 'production' && (currentTab === 'planning' || currentTab === 'skus')) {
-              setCurrentTab('dashboard');
-            }
-          }}
         />
       </div>
     </div>

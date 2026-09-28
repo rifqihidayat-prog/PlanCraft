@@ -20,18 +20,16 @@ export const DEFAULT_ACCOUNTS: (AuthUser & { pin: string })[] = [
 const AUTH_STORAGE_KEY = 'plancraft_current_user_v1';
 const isClient = typeof window !== 'undefined';
 
-export function getStoredUser(): AuthUser {
-  if (!isClient) return DEFAULT_ACCOUNTS[0]; // Admin by default for SSR
+export function getStoredUser(): AuthUser | null {
+  if (!isClient) return null;
   try {
     const data = localStorage.getItem(AUTH_STORAGE_KEY);
     if (data) {
-      return JSON.parse(data);
+      return JSON.parse(data) as AuthUser;
     }
-    // Default to admin initially
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(DEFAULT_ACCOUNTS[0]));
-    return DEFAULT_ACCOUNTS[0];
+    return null;
   } catch {
-    return DEFAULT_ACCOUNTS[0];
+    return null;
   }
 }
 
@@ -44,16 +42,13 @@ export function saveStoredUser(user: AuthUser): void {
   }
 }
 
-export function switchRole(role: UserRole): AuthUser {
-  const account = DEFAULT_ACCOUNTS.find(a => a.role === role) || DEFAULT_ACCOUNTS[0];
-  const authUser: AuthUser = {
-    id: account.id,
-    username: account.username,
-    name: account.name,
-    role: account.role,
-  };
-  saveStoredUser(authUser);
-  return authUser;
+export function logoutUser(): void {
+  if (!isClient) return;
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (e) {
+    console.error('Failed to clear user session', e);
+  }
 }
 
 export function loginWithCredentials(username: string, pin: string): {

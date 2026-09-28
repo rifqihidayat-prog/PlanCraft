@@ -1,6 +1,6 @@
 'use client';
 
-import { Snowflake, Smartphone, Monitor, RefreshCw, Calendar, ShieldCheck, HardHat } from 'lucide-react';
+import { Snowflake, Smartphone, Monitor, RefreshCw, Calendar, ShieldCheck, HardHat, LogOut } from 'lucide-react';
 import { WeeklyProductionPlan, AuthUser } from '@/types';
 
 interface NavbarProps {
@@ -9,7 +9,7 @@ interface NavbarProps {
   isMobileFrame: boolean;
   setIsMobileFrame: (val: boolean) => void;
   onRefresh: () => void;
-  onOpenLogin: () => void;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,7 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isMobileFrame,
   setIsMobileFrame,
   onRefresh,
-  onOpenLogin,
+  onLogout,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-white shadow-md">
@@ -52,14 +52,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>({activePlan.year})</span>
           </div>
 
-          {/* User Role Switcher Button */}
-          <button
-            onClick={onOpenLogin}
-            title={`Akun aktif: ${currentUser.name}. Klik untuk ganti akun.`}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition active:scale-95 ${
+          {/* User Role Badge */}
+          <div
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${
               currentUser.role === 'admin'
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20'
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
             }`}
           >
             {currentUser.role === 'admin' ? (
@@ -68,6 +66,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <HardHat className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             )}
             <span>{currentUser.role === 'admin' ? 'Admin' : 'Produksi'}</span>
+          </div>
+
+          {/* Logout Button */}
+          <button
+            onClick={onLogout}
+            title="Keluar / Logout Akun"
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 border border-slate-700 hover:border-rose-500/40 text-xs text-slate-300 transition active:scale-95 group"
+          >
+            <LogOut className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-400" />
+            <span className="hidden xs:inline">Keluar</span>
           </button>
 
           {/* Refresh button */}
