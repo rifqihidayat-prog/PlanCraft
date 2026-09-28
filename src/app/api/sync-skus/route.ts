@@ -34,25 +34,20 @@ async function handleSync(sheetId: string, gid: string): Promise<NextResponse<GS
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/csv,text/plain,*/*'
       },
-      // In Node/Next.js fetch, manual redirect lets us detect Google login redirect
-      redirect: 'manual',
+      // Follow redirects to get the exported file
+      redirect: 'follow',
       cache: 'no-store',
     });
 
-    // Check if Google redirected to login page (means private sheet)
-    if (
-      response.status === 301 ||
-      response.status === 302 ||
-      response.status === 307 ||
-      response.status === 308 ||
-      response.status === 401 ||
-      response.status === 403
-    ) {
+    const finalUrl = response.url || '';
+
+    // Check if redirected to Google login
+    if (finalUrl.includes('accounts.google.com') || response.status === 401 || response.status === 403) {
       return NextResponse.json({
         success: false,
         errorCode: 'RESTRICTED_ACCESS',
         message: 'Google Sheet berstatus dibatasi (Private). Mohon ubah akses di Google Sheet: Klik tombol "Bagikan" -> Ubah "Akses umum" ke "Siapa saja yang memiliki link" sebagai Pelihat (Viewer).'
-      }, { status: 200 }); // return 200 so UI can display rich guidance
+      }, { status: 200 });
     }
 
     if (!response.ok) {
@@ -65,12 +60,12 @@ async function handleSync(sheetId: string, gid: string): Promise<NextResponse<GS
 
     const csvText = await response.text();
 
-    // Check if the response returned an HTML login page instead of CSV
-    if (csvText.includes('<!DOCTYPE html>') || csvText.includes('accounts.google.com')) {
+    // Check if content is an HTML login page
+    if (csvText.includes('<!DOCTYPE html>') || csvText.includes('ServiceLogin') || csvText.includes('accounts.google.com')) {
       return NextResponse.json({
         success: false,
         errorCode: 'RESTRICTED_ACCESS',
-        message: 'Google Sheet memerlukan login. Silakan ubah izin sharing menjadi "Anyone with the link can view".'
+        message: 'Google Sheet memerlukan login akun Google. Silakan ubah izin sharing menjadi "Anyone with the link can view".'
       }, { status: 200 });
     }
 
@@ -80,7 +75,7 @@ async function handleSync(sheetId: string, gid: string): Promise<NextResponse<GS
       return NextResponse.json({
         success: false,
         errorCode: 'INVALID_FORMAT',
-        message: 'Data berhasil diambil namun tidak ada baris data SKU yang terdeteksi di baris tabel.'
+        message: 'Data spreadsheet berhasil diunduh namun tidak ada baris SKU yang terdeteksi.'
       }, { status: 200 });
     }
 
@@ -88,7 +83,7 @@ async function handleSync(sheetId: string, gid: string): Promise<NextResponse<GS
       success: true,
       count: skus.length,
       skus,
-      message: `Berhasil menyinkronkan ${skus.length} data SKU dari Google Sheet Database PlanCraft!`
+      message: `Berhasil menyinkronkan ${skus.length} data SKU dari Database PlanCraft!`
     });
 
   } catch (error: unknown) {
@@ -96,7 +91,7 @@ async function handleSync(sheetId: string, gid: string): Promise<NextResponse<GS
     return NextResponse.json({
       success: false,
       errorCode: 'NETWORK_ERROR',
-      message: `Terjadi kendala jaringan saat menghubungkan ke Google Sheet: ${errorMsg}`
+      message: `Terjadi kendala saat menghubungkan ke Google Sheet: ${errorMsg}`
     }, { status: 200 });
   }
 }

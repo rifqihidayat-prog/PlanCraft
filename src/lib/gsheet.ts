@@ -1,4 +1,4 @@
-import { ProductSKU, GSheetSyncResult } from '@/types';
+import { ProductSKU } from '@/types';
 
 export const DEFAULT_GSHEET_ID = '1Dpe2Z8s3OcAJVN65vjGr2E_C2gR3UBPe946kG1GLR28';
 
@@ -11,77 +11,108 @@ export function extractSheetId(input: string): string {
   if (match && match[1]) {
     return match[1];
   }
-  // If it's already an ID
-  if (/^[a-zA-Z0-9-_]{20,}$/.test(trimmed)) {
-    return trimmed;
+  // Check if starts with ID before query params
+  const idOnly = trimmed.split('/')[0].split('?')[0];
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(idOnly)) {
+    return idOnly;
   }
   return DEFAULT_GSHEET_ID;
 }
 
 /**
- * Parse CSV text into ProductSKU array
+ * Parse CSV text from Google Sheet into ProductSKU array
  */
 export function parseCSVToSKUs(csvText: string): ProductSKU[] {
   const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length < 2) return [];
 
-  // Parse header
-  const header = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+  // Find the header line by scanning the first 10 lines
+  let headerLineIndex = -1;
+  let codeIdx = -1;
+  let nameIdx = -1;
+  let grIdx = -1;
+  let kgIdx = -1;
+  let catIdx = -1;
 
-  // Find column indexes
-  let codeIdx = header.findIndex(h => h.includes('sku') || h.includes('kode') || h.includes('code'));
-  let nameIdx = header.findIndex(h => h.includes('nama') || h.includes('name') || h.includes('barang') || h.includes('item'));
-  let catIdx = header.findIndex(h => h.includes('kategori') || h.includes('category') || h.includes('jenis'));
-  let unitIdx = header.findIndex(h => h.includes('satuan') || h.includes('unit') || h.includes('uom'));
-  let specIdx = header.findIndex(h => h.includes('spek') || h.includes('spec') || h.includes('ket') || h.includes('desc'));
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const cols = parseCSVLine(lines[i]).map(c => c.trim().toLowerCase());
+    const cIdx = cols.findIndex(c => c === 'sku' || c.includes('kode') || c.includes('code'));
+    const nIdx = cols.findIndex(c => c.includes('nama') || c.includes('name') || c.includes('barang') || c.includes('item'));
 
-  // Defaults if header names don't match
-  if (codeIdx === -1) codeIdx = 0;
-  if (nameIdx === -1) nameIdx = 1 < header.length ? 1 : 0;
-  if (catIdx === -1) catIdx = 2 < header.length ? 2 : -1;
-  if (unitIdx === -1) unitIdx = 3 < header.length ? 3 : -1;
-  if (specIdx === -1) specIdx = 4 < header.length ? 4 : -1;
+    if (cIdx !== -1 && nIdx !== -1) {
+      headerLineIndex = i;
+      codeIdx = cIdx;
+      nameIdx = nIdx;
+      grIdx = cols.findIndex(c => c.includes('berat (gr)') || c.includes('gram') || c.includes('(gr)'));
+      kgIdx = cols.findIndex(c => c.includes('berat (kg)') || c.includes('(kg)'));
+      catIdx = cols.findIndex(c => c.includes('kategori') || c.includes('category'));
+      break;
+    }
+  }
+
+  // Fallback if no explicit header found
+  if (headerLineIndex === -1) {
+    headerLineIndex = 0;
+    codeIdx = 0;
+    nameIdx = 1;
+    grIdx = 2;
+    kgIdx = 3;
+  }
 
   const result: ProductSKU[] = [];
+  const seenCodes = new Set<string>();
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerLineIndex + 1; i < lines.length; i++) {
     const cols = parseCSVLine(lines[i]);
     if (!cols || cols.length === 0) continue;
 
     const rawCode = cols[codeIdx]?.trim();
     const rawName = cols[nameIdx]?.trim();
 
-    if (!rawCode && !rawName) continue;
+    // Skip empty lines, instructions, or subheadings
+    if (!rawCode || !rawName) continue;
+    if (rawCode.toLowerCase() === 'sku' || rawName.toLowerCase().includes('nama barang')) continue;
 
-    const code = rawCode || `SKU-${i}`;
-    const name = rawName || rawCode;
-    const rawCategory = catIdx !== -1 ? cols[catIdx]?.trim() : '';
-    const unit = (unitIdx !== -1 && cols[unitIdx]?.toLowerCase().includes('pack')) ? 'pack' : 'kg';
-    const specs = specIdx !== -1 ? cols[specIdx]?.trim() : '';
+    // Check if duplicate SKU code
+    if (seenCodes.has(rawCode)) continue;
+    seenCodes.add(rawCode);
 
-    // Normalize category
+    // Format spec: berat gr / kg
+    const beratGr = grIdx !== -1 ? cols[grIdx]?.trim() : '';
+    const beratKg = kgIdx !== -1 ? cols[kgIdx]?.trim() : '';
+    let specs = '';
+    if (beratGr && beratKg) {
+      specs = `Berat: ${beratGr} gr (${beratKg} kg)`;
+    } else if (beratGr) {
+      specs = `Berat: ${beratGr} gr`;
+    } else if (beratKg) {
+      specs = `Berat: ${beratKg} kg`;
+    }
+
+    // Classify category intelligently for frozen meat processing
+    const nameLower = rawName.toLowerCase();
     let category: ProductSKU['category'] = 'Slice';
-    const lowerCat = (rawCategory + ' ' + name).toLowerCase();
-    if (lowerCat.includes('giling') || lowerCat.includes('mince')) {
-      category = 'Mince/Giling';
-    } else if (lowerCat.includes('saikoro') || lowerCat.includes('dadu') || lowerCat.includes('dicing') || lowerCat.includes('cube')) {
-      category = 'Dicing/Saikoro';
-    } else if (lowerCat.includes('steak') || lowerCat.includes('ribeye') || lowerCat.includes('sirloin') || lowerCat.includes('tenderloin')) {
-      category = 'Steak Cut';
-    } else if (lowerCat.includes('trim') || lowerCat.includes('lemak') || lowerCat.includes('tulang') || lowerCat.includes('susut')) {
-      category = 'Trimming';
-    } else if (lowerCat.includes('slice') || lowerCat.includes('shabu') || lowerCat.includes('sukiyaki') || lowerCat.includes('yakiniku')) {
+
+    if (nameLower.includes('slice') || nameLower.includes('shortplate') || nameLower.includes('karubi') || nameLower.includes('sukiyaki') || nameLower.includes('shabu') || nameLower.includes('yakiniku')) {
       category = 'Slice';
+    } else if (nameLower.includes('giling') || nameLower.includes('mince')) {
+      category = 'Mince/Giling';
+    } else if (nameLower.includes('saikoro') || nameLower.includes('dadu') || nameLower.includes('cube') || nameLower.includes('dicing')) {
+      category = 'Dicing/Saikoro';
+    } else if (nameLower.includes('steak') || nameLower.includes('ribeye') || nameLower.includes('sirloin') || nameLower.includes('tenderloin') || nameLower.includes('wagyu') || nameLower.includes('meltique')) {
+      category = 'Steak Cut';
+    } else if (nameLower.includes('trim') || nameLower.includes('lemak') || nameLower.includes('tulang') || nameLower.includes('sop') || nameLower.includes('rawon') || nameLower.includes('rendang') || nameLower.includes('karkas')) {
+      category = 'Trimming';
     } else {
       category = 'Lainnya';
     }
 
     result.push({
-      id: `sku-imported-${i}-${Date.now().toString(36)}`,
-      sku_code: code,
-      name,
+      id: `sku-gsheet-${rawCode}`,
+      sku_code: rawCode,
+      name: rawName,
       category,
-      unit,
+      unit: 'kg',
       specs: specs || undefined,
       active: true,
     });
