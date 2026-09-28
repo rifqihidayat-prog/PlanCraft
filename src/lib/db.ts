@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'node:crypto';
 import { ProductSKU, WeeklyProductionPlan, WeeklyTargetItem, DailyProductionLog, AuthUser, UserRole } from '@/types';
 import { DEFAULT_SKUS, INITIAL_PLANS, INITIAL_LOGS } from './mockData';
 
@@ -24,6 +25,21 @@ export function getDatabase(): Database.Database {
   return dbInstance;
 }
 
+export function hashPin(pin: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(pin, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+export function verifyPin(pin: string, storedHash: string): boolean {
+  if (!storedHash.includes(':')) {
+    return pin === storedHash;
+  }
+  const [salt, hash] = storedHash.split(':');
+  const verifyHash = crypto.scryptSync(pin, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(verifyHash, 'hex'));
+}
+
 function initSchemaAndSeed(db: Database.Database) {
   // 1. Create tables
   db.exec(`
@@ -33,6 +49,15 @@ function initSchemaAndSeed(db: Database.Database) {
       name TEXT NOT NULL,
       role TEXT NOT NULL,
       pin TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS skus (
@@ -85,12 +110,23 @@ function initSchemaAndSeed(db: Database.Database) {
     );
   `);
 
-  // 2. Auto-seed Users if empty
+  // 2. Auto-seed Users if empty, or upgrade existing plain text PINs
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
   if (userCount.count === 0) {
+    const adminPin = process.env.ADMIN_PIN || '1234';
+    const prodPin = process.env.PRODUCTION_PIN || '1234';
     const insertUser = db.prepare('INSERT INTO users (id, username, name, role, pin) VALUES (?, ?, ?, ?, ?)');
-    insertUser.run('user-admin', 'admin', 'Admin PPIC', 'admin', '1234');
-    insertUser.run('user-prod', 'produksi', 'Tim Produksi', 'production', '1234');
+    insertUser.run('user-admin', 'admin', 'Admin PPIC', 'admin', hashPin(adminPin));
+    insertUser.run('user-prod', 'produksi', 'Tim Produksi', 'production', hashPin(prodPin));
+  } else {
+    // Otomatis upgrade PIN plain text menjadi scrypt hash terenkripsi
+    const existingUsers = db.prepare('SELECT id, pin FROM users').all() as Array<{ id: string; pin: string }>;
+    const updatePinStmt = db.prepare('UPDATE users SET pin = ? WHERE id = ?');
+    for (const u of existingUsers) {
+      if (!u.pin.includes(':')) {
+        updatePinStmt.run(hashPin(u.pin), u.id);
+      }
+    }
   }
 
   // 3. Auto-seed SKUs if empty
@@ -385,10 +421,123 @@ export function verifyUserCredentials(username: string, pin: string): AuthUser |
   const cleanUsername = username.trim().toLowerCase();
   const cleanPin = pin.trim();
 
-  const user = db.prepare('SELECT id, username, name, role FROM users WHERE LOWER(username) = ? AND pin = ?').get(
-    cleanUsername,
-    cleanPin
-  ) as { id: string; username: string; name: string; role: UserRole } | undefined;
+  const user = db.prepare('SELECT id, username, name, role, pin FROM users WHERE LOWER(username) = ?').get(
+    cleanUsername
+  ) as { id: string; username: string; name: string; role: UserRole; pin: string } | undefined;
 
-  return user || null;
+  if (!user) return null;
+
+  if (!verifyPin(cleanPin, user.pin)) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+  };
 }
+
+// ==================== SESSION MANAGEMENT ====================
+
+export function createSession(userId: string): { token: string; expiresAt: Date } {
+  const db = getDatabase();
+  const sessionId = `sess-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 hari
+  const createdAt = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO sessions (id, user_id, token, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(sessionId, userId, token, expiresAt.toISOString(), createdAt);
+
+  return { token, expiresAt };
+}
+
+export function validateSession(token: string): AuthUser | null {
+  if (!token) return null;
+  const db = getDatabase();
+  cleanExpiredSessions();
+
+  const row = db.prepare(`
+    SELECT u.id, u.username, u.name, u.role
+    FROM sessions s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')
+  `).get(token) as { id: string; username: string; name: string; role: UserRole } | undefined;
+
+  return row || null;
+}
+
+export function deleteSession(token: string): void {
+  if (!token) return;
+  const db = getDatabase();
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+}
+
+export function cleanExpiredSessions(): void {
+  const db = getDatabase();
+  db.prepare("DELETE FROM sessions WHERE datetime(expires_at) <= datetime('now')").run();
+}
+
+// ==================== BROWSER DATA MIGRATION ====================
+
+export function migrateBrowserData(data: {
+  logs?: DailyProductionLog[];
+  plans?: WeeklyProductionPlan[];
+  skus?: ProductSKU[];
+}): { migratedLogs: number; migratedPlans: number; migratedSkus: number } {
+  const db = getDatabase();
+  let migratedLogs = 0;
+  let migratedPlans = 0;
+  let migratedSkus = 0;
+
+  // 1. Migrasi Logs (jangan menimpa atau menduplikasi yang sudah ada)
+  if (Array.isArray(data.logs) && data.logs.length > 0) {
+    const checkLogStmt = db.prepare('SELECT id FROM production_logs WHERE id = ?');
+    const insertLogStmt = db.prepare(`
+      INSERT INTO production_logs (id, plan_id, date, sku_id, sku_code, sku_name, actual_kg, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const logsTx = db.transaction((logs: DailyProductionLog[]) => {
+      for (const l of logs) {
+        const existing = checkLogStmt.get(l.id);
+        if (!existing) {
+          insertLogStmt.run(
+            l.id,
+            l.plan_id,
+            l.date,
+            l.sku_id,
+            l.sku_code,
+            l.sku_name,
+            l.actual_kg,
+            l.notes || null,
+            l.created_at || new Date().toISOString()
+          );
+          migratedLogs++;
+        }
+      }
+    });
+    logsTx(data.logs);
+  }
+
+  // 2. Migrasi Plans jika ada plan kustom lokal
+  if (Array.isArray(data.plans) && data.plans.length > 0) {
+    for (const p of data.plans) {
+      savePlan(p);
+      migratedPlans++;
+    }
+  }
+
+  // 3. Migrasi SKUs jika ada
+  if (Array.isArray(data.skus) && data.skus.length > 0) {
+    upsertSKUs(data.skus);
+    migratedSkus = data.skus.length;
+  }
+
+  return { migratedLogs, migratedPlans, migratedSkus };
+}
+

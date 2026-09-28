@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllPlans, savePlan, getActivePlan } from '@/lib/db';
+import { requireAuth } from '@/lib/serverAuth';
 import { WeeklyProductionPlan } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth.error) return auth.error;
+
   try {
     const plans = getAllPlans();
     const activePlan = getActivePlan();
@@ -16,6 +20,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Hanya admin PPIC yang berwenang mengubah atau membuat rencana target produksi
+  const auth = requireAuth(req, ['admin']);
+  if (auth.error) return auth.error;
+
   try {
     const plan = (await req.json()) as WeeklyProductionPlan;
     if (!plan || !plan.id || !plan.week_number) {

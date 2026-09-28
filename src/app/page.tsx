@@ -27,7 +27,10 @@ import {
   removeProductionLog, 
   saveProductionPlan, 
   setActivePlanOnServer, 
-  saveSKUsToServer 
+  saveSKUsToServer,
+  checkSession,
+  logoutOnServer,
+  migrateBrowserDataOnServer
 } from '@/lib/apiClient';
 import { getStoredUser, logoutUser } from '@/lib/auth';
 import { Navbar } from '@/components/layout/Navbar';
@@ -53,29 +56,45 @@ export default function HomePage() {
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>('all');
   const [logs, setLogs] = useState<DailyProductionLog[]>(INITIAL_LOGS);
 
-  // Initialize from server SQLite database on mount
+  // Inisialisasi: Periksa sesi server, migrasi data browser, dan ambil data SQLite
   useEffect(() => {
-    const loadedUser = getStoredUser();
-    setCurrentUser(loadedUser);
+    async function initAuthAndData() {
+      // 1. Cek sesi HTTP-only cookie di server
+      const sessionUser = await checkSession();
 
-    async function initData() {
-      const serverData = await fetchInitialData();
-      if (serverData) {
-        setSkus(serverData.skus);
-        setPlans(serverData.plans);
-        setActivePlan(serverData.activePlan);
-        setLogs(serverData.logs);
+      if (sessionUser) {
+        setCurrentUser(sessionUser);
+
+        // 2. Jalankan migrasi satu kali jika browser memiliki data lama di localStorage
+        if (typeof window !== 'undefined' && localStorage.getItem('plancraft_migrated_v1') !== 'true') {
+          const oldLogs = getStoredLogs();
+          const oldPlans = getStoredPlans();
+          const oldSkus = getStoredSKUs();
+
+          await migrateBrowserDataOnServer({
+            logs: oldLogs,
+            plans: oldPlans,
+            skus: oldSkus,
+          });
+          localStorage.setItem('plancraft_migrated_v1', 'true');
+        }
+
+        // 3. Ambil data terpusat dari SQLite server
+        const serverData = await fetchInitialData();
+        if (serverData) {
+          setSkus(serverData.skus);
+          setPlans(serverData.plans);
+          setActivePlan(serverData.activePlan);
+          setLogs(serverData.logs);
+        }
       } else {
-        // Fallback local
-        setSkus(getStoredSKUs());
-        setPlans(getStoredPlans());
-        setActivePlan(getActivePlan());
-        setLogs(getStoredLogs());
+        // Sesi tidak ditemukan atau kedaluwarsa
+        setCurrentUser(null);
       }
       setIsClientLoaded(true);
     }
 
-    initData();
+    initAuthAndData();
   }, []);
 
   // Proteksi Akses: Tim Produksi tidak boleh mengakses planning atau skus
@@ -86,7 +105,8 @@ export default function HomePage() {
   }, [currentUser?.role, currentTab]);
 
   // Handlers
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logoutOnServer();
     logoutUser();
     setCurrentUser(null);
   };
@@ -171,8 +191,31 @@ export default function HomePage() {
   if (!currentUser) {
     return (
       <LoginForm
-        onLogin={(user) => {
+        onLogin={async (user) => {
           setCurrentUser(user);
+
+          // Cek & jalankan migrasi jika belum pernah
+          if (typeof window !== 'undefined' && localStorage.getItem('plancraft_migrated_v1') !== 'true') {
+            const oldLogs = getStoredLogs();
+            const oldPlans = getStoredPlans();
+            const oldSkus = getStoredSKUs();
+
+            await migrateBrowserDataOnServer({
+              logs: oldLogs,
+              plans: oldPlans,
+              skus: oldSkus,
+            });
+            localStorage.setItem('plancraft_migrated_v1', 'true');
+          }
+
+          // Tarik data SQLite terpusat
+          const serverData = await fetchInitialData();
+          if (serverData) {
+            setSkus(serverData.skus);
+            setPlans(serverData.plans);
+            setActivePlan(serverData.activePlan);
+            setLogs(serverData.logs);
+          }
           setCurrentTab('dashboard');
         }}
       />

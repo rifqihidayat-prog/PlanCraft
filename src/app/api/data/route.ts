@@ -1,9 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAllSKUs, getAllPlans, getActivePlan, getAllLogs, getActivePlanId } from '@/lib/db';
+import { requireAuth } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Autentikasi server-side
+  const auth = requireAuth(req);
+  if (auth.error) return auth.error;
+
   try {
     const skus = getAllSKUs();
     const plans = getAllPlans();

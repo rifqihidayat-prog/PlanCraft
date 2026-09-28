@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setActivePlanIdInDb, getActivePlan } from '@/lib/db';
+import { requireAuth } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth.error) return auth.error;
+
   try {
     const { planId } = await req.json();
     if (!planId) {

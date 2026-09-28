@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllLogs, addProductionLog, deleteProductionLog } from '@/lib/db';
+import { requireAuth } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth.error) return auth.error;
+
   try {
     const logs = getAllLogs();
     return NextResponse.json({ success: true, data: logs });
@@ -14,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = requireAuth(req);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     if (!body.plan_id || !body.sku_id || typeof body.actual_kg !== 'number') {
@@ -38,6 +45,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // Hanya admin yang diizinkan menghapus riwayat produksi
+  const auth = requireAuth(req, ['admin']);
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
