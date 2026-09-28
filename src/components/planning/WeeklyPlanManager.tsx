@@ -13,7 +13,7 @@ import {
   Trash2, 
   Save, 
   CheckCircle2, 
-  Search,
+  Search, 
   X,
   Calendar
 } from 'lucide-react';
@@ -55,7 +55,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     return skus
       .filter(s => !targetIdSet.has(s.id))
       .filter(s => !q || s.name.toLowerCase().includes(q) || s.sku_code.toLowerCase().includes(q))
-      .slice(0, 60); // limit for fast and smooth scrolling
+      .slice(0, 60);
   }, [skus, targetIdSet, searchQuery]);
 
   // Handle target kg change for existing item
@@ -164,7 +164,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-0"
               />
             </div>
 
@@ -179,7 +179,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                 value={weekNumber}
                 onChange={(e) => setWeekNumber(Number(e.target.value))}
                 required
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-0"
               />
             </div>
           </div>
@@ -194,7 +194,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 required
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-0"
               />
             </div>
             <div>
@@ -206,7 +206,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 required
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-0"
               />
             </div>
           </div>
@@ -220,13 +220,13 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Contoh: Utamakan pemenuhan pesanan slice dan giling."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-0"
             />
           </div>
         </div>
 
         {/* Commitment Summary Card */}
-        <div className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 border border-rose-900/30 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
           <div>
             <span className="text-[11px] text-slate-400 uppercase font-semibold">
               Total Target Rencana
@@ -243,7 +243,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
           </div>
         </div>
 
-        {/* Add SKU to Targets Section (Custom Searchable Combobox) */}
+        {/* Add SKU to Targets Section (Custom Searchable Combobox dengan garis gelap) */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
           <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
             + Tambah Barang ke Plan Minggu Ini
@@ -251,17 +251,17 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
 
           <div className="space-y-2">
             {selectedSkuToAdd ? (
-              <div className="bg-slate-950 border border-rose-500/50 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 font-semibold">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-rose-400 font-semibold border border-slate-800">
                       {selectedSkuToAdd.sku_code}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
                       {selectedSkuToAdd.category}
                     </span>
                   </div>
-                  <h3 className="text-xs font-bold text-white mt-1 truncate">
+                  <h3 className="text-xs font-bold text-white mt-1.5 truncate">
                     {selectedSkuToAdd.name}
                   </h3>
                 </div>
@@ -274,7 +274,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                       value={newTargetKg}
                       onChange={(e) => setNewTargetKg(e.target.value)}
                       placeholder="Target Kg"
-                      className="w-28 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white text-right focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                      className="w-28 bg-slate-900 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white text-right focus:outline-none focus:ring-0"
                     />
                     <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
                       Kg
@@ -284,7 +284,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                   <button
                     type="button"
                     onClick={handleAddTarget}
-                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95"
+                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Tambah
@@ -313,7 +313,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                       setSearchQuery(e.target.value);
                       setIsDropdownOpen(true);
                     }}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-rose-500 rounded-xl pl-9 pr-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl pl-9 pr-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-0"
                   />
                   {searchQuery && (
                     <button
@@ -326,9 +326,9 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                   )}
                 </div>
 
-                {/* Floating Dark Dropdown Panel */}
+                {/* Floating Dark Dropdown Panel (Garis hitam pekat) */}
                 {isDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-slate-950 border border-slate-700 rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-800">
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-black border border-slate-800 rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-900">
                     {filteredAvailableSkus.length === 0 ? (
                       <div className="p-3 text-xs text-slate-500 text-center">
                         Tidak ada barang yang cocok atau barang sudah ada di daftar.
@@ -342,14 +342,14 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                             setSelectedSkuToAdd(sku);
                             setIsDropdownOpen(false);
                           }}
-                          className="w-full text-left p-2.5 hover:bg-slate-800 transition flex items-center justify-between group active:bg-slate-700"
+                          className="w-full text-left p-2.5 hover:bg-slate-900 transition flex items-center justify-between group active:bg-slate-800"
                         >
                           <div className="min-w-0 pr-2">
                             <div className="flex items-center space-x-1.5">
-                              <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-900 text-slate-300">
+                              <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
                                 {sku.sku_code}
                               </span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
                                 {sku.category}
                               </span>
                               {sku.specs && (
@@ -362,7 +362,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                               {sku.name}
                             </p>
                           </div>
-                          <Plus className="w-4 h-4 text-slate-500 group-hover:text-rose-400 shrink-0" />
+                          <Plus className="w-4 h-4 text-slate-600 group-hover:text-rose-400 shrink-0" />
                         </button>
                       ))
                     )}
@@ -385,18 +385,18 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
             {targets.map((item) => (
               <div
                 key={item.sku_id}
-                className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3"
+                className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-slate-700 transition"
               >
                 <div className="min-w-0">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-800 text-slate-300">
+                    <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
                       {item.sku_code}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
                       {item.category}
                     </span>
                   </div>
-                  <h3 className="text-xs font-bold text-white mt-1 truncate">
+                  <h3 className="text-xs font-bold text-white mt-1.5 truncate">
                     {item.sku_name}
                   </h3>
                 </div>
@@ -408,7 +408,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                       step="10"
                       value={item.target_kg}
                       onChange={(e) => handleUpdateTargetKg(item.sku_id, parseFloat(e.target.value))}
-                      className="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold text-white text-right focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                      className="w-24 bg-slate-900 border border-slate-800 focus:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold text-white text-right focus:outline-none focus:ring-0"
                     />
                     <span className="text-[10px] text-slate-500 ml-1">Kg</span>
                   </div>

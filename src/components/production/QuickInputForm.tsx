@@ -16,8 +16,8 @@ import {
   AlertCircle,
   Search,
   Plus,
-  Package,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
 
 interface QuickInputFormProps {
@@ -47,7 +47,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Set default selected SKU from first target or empty
+  // Default selected SKU from first target
   const [selectedSku, setSelectedSku] = useState<{
     id: string;
     code: string;
@@ -74,7 +74,10 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Combine items: prioritize items in current weekly plan
+  // History tab filter: 'all' = all dates, 'selected' = only selected date
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'selected'>('all');
+
+  // Plan SKU map
   const planSkuMap = useMemo(() => {
     const map = new Map<string, number>();
     plan.targets.forEach(t => map.set(t.sku_id, t.target_kg));
@@ -101,7 +104,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
     const notInPlan = skus
       .filter(s => !planSkuMap.has(s.id))
       .filter(s => !query || s.name.toLowerCase().includes(query) || s.sku_code.toLowerCase().includes(query))
-      .slice(0, 50) // limit for fast rendering
+      .slice(0, 50)
       .map(s => ({
         id: s.id,
         code: s.sku_code,
@@ -166,8 +169,13 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
     setTimeout(() => setSuccessMsg(null), 4000);
   };
 
-  // Filter logs for selected date
-  const todayLogs = logs.filter(l => l.date === date);
+  // Filter logs based on historyFilter
+  const displayedLogs = useMemo(() => {
+    if (historyFilter === 'selected') {
+      return logs.filter(l => l.date === date);
+    }
+    return logs; // Show all logs regardless of date!
+  }, [logs, historyFilter, date]);
 
   return (
     <div className="space-y-4 pb-24">
@@ -178,7 +186,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
           Input Hasil Produksi Jadi
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          Pilih nama barang/SKU, lalu masukkan total berat hasil jadi (Kg) yang sudah diproduksi.
+          Cari nama barang/SKU, lalu masukkan total berat hasil jadi (Kg) yang sudah diproduksi.
         </p>
       </div>
 
@@ -189,7 +197,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
         </div>
       )}
 
-      {/* Main Input Card */}
+      {/* Main Input Card (Garis gelap / hitam pekat) */}
       <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
         {/* Date Selector */}
         <div>
@@ -200,12 +208,12 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:ring-2 focus:ring-rose-500 focus:outline-none"
+            className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:outline-none focus:ring-0"
             required
           />
         </div>
 
-        {/* Search & Select SKU / Nama Barang */}
+        {/* Search & Select SKU / Nama Barang (Garis Gelap Menyesuaikan) */}
         <div className="space-y-2 relative">
           <label className="block text-xs font-semibold text-slate-300">
             Nama Barang / SKU
@@ -213,19 +221,19 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
 
           {/* Selected Item Box */}
           {selectedSku ? (
-            <div className="bg-slate-950 border-2 border-rose-500/60 rounded-xl p-3 flex items-center justify-between">
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
               <div className="min-w-0 pr-2">
                 <div className="flex items-center space-x-1.5">
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 font-semibold">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-rose-400 font-semibold border border-slate-800">
                     {selectedSku.code}
                   </span>
                   {selectedSku.targetKg !== undefined && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium">
-                      Target Pekan: {formatKg(selectedSku.targetKg)} Kg
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-emerald-400 font-medium border border-slate-800">
+                      Target: {formatKg(selectedSku.targetKg)} Kg
                     </span>
                   )}
                 </div>
-                <h3 className="text-sm font-bold text-white mt-1 truncate">
+                <h3 className="text-sm font-bold text-white mt-1.5 truncate">
                   {selectedSku.name}
                 </h3>
               </div>
@@ -235,7 +243,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                   setSelectedSku(null);
                   setIsDropdownOpen(true);
                 }}
-                className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white shrink-0 font-medium transition"
+                className="px-2.5 py-1 text-xs rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white shrink-0 font-medium transition border border-slate-800"
               >
                 Ganti Barang
               </button>
@@ -253,7 +261,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                     setSearchQuery(e.target.value);
                     setIsDropdownOpen(true);
                   }}
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl pl-9 pr-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl pl-9 pr-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-0"
                 />
                 {searchQuery && (
                   <button
@@ -266,9 +274,9 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                 )}
               </div>
 
-              {/* Floating Autocomplete Dropdown */}
+              {/* Floating Autocomplete Dropdown Panel (Garis Hitam Gelap) */}
               {isDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-64 overflow-y-auto divide-y divide-slate-800">
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-black border border-slate-800 rounded-xl shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-900">
                   {filteredOptions.length === 0 ? (
                     <div className="p-3 text-xs text-slate-500 text-center">
                       Barang tidak ditemukan dalam database.
@@ -279,19 +287,19 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                         type="button"
                         key={item.id}
                         onClick={() => handleSelectItem(item)}
-                        className="w-full text-left p-2.5 hover:bg-slate-800 transition flex items-center justify-between group active:bg-slate-700"
+                        className="w-full text-left p-2.5 hover:bg-slate-900 transition flex items-center justify-between group active:bg-slate-800"
                       >
                         <div className="min-w-0 pr-2">
                           <div className="flex items-center space-x-1.5">
-                            <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-950 text-slate-300">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
                               {item.code}
                             </span>
                             {item.isInPlan ? (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-semibold">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-300 font-semibold border border-rose-900/40">
                                 Target Plan: {formatKg(item.targetKg || 0)} Kg
                               </span>
                             ) : (
-                              <span className="text-[10px] px-1 py-0.5 rounded bg-slate-800 text-slate-400">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
                                 {item.category}
                               </span>
                             )}
@@ -300,7 +308,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                             {item.name}
                           </p>
                         </div>
-                        <Plus className="w-4 h-4 text-slate-500 group-hover:text-rose-400 shrink-0" />
+                        <Plus className="w-4 h-4 text-slate-600 group-hover:text-rose-400 shrink-0" />
                       </button>
                     ))
                   )}
@@ -310,8 +318,8 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
           )}
         </div>
 
-        {/* Big Numeric Input: Hasil Jadi (Kg) */}
-        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4">
+        {/* Big Numeric Input: Hasil Jadi (Kg) (Garis Hitam Gelap) */}
+        <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4">
           <label className="block text-xs font-bold text-slate-200 mb-1 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Scale className="w-4 h-4 text-emerald-400" />
@@ -327,7 +335,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
               value={actualKg}
               onChange={(e) => setActualKg(e.target.value)}
               placeholder="0.0"
-              className="w-full bg-slate-900 border-2 border-slate-700 focus:border-rose-500 rounded-xl px-4 py-3 text-2xl sm:text-3xl font-black text-white placeholder-slate-600 focus:outline-none tracking-tight"
+              className="w-full bg-slate-900 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-3 text-2xl sm:text-3xl font-black text-white placeholder-slate-600 focus:outline-none focus:ring-0 tracking-tight"
               required
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
@@ -343,7 +351,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                 type="button"
                 key={val}
                 onClick={() => handleAddKg(val)}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold shrink-0 transition active:scale-95 flex items-center gap-0.5"
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold shrink-0 transition active:scale-95 flex items-center gap-0.5 border border-slate-800"
               >
                 <Plus className="w-3 h-3" />
                 {val}
@@ -366,7 +374,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                 onClick={() => setBottleneck(tag)}
                 className={`text-xs px-2.5 py-1 rounded-lg border transition ${
                   bottleneck === tag
-                    ? 'bg-rose-500 text-white border-rose-500 font-semibold'
+                    ? 'bg-rose-600 text-white border-rose-500 font-semibold'
                     : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
                 }`}
               >
@@ -385,8 +393,8 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Contoh: Batch 04, selesai jam 15:30"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+            placeholder="Contoh: Selesai shift 1, simpan di cold room A"
+            className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-0"
           />
         </div>
 
@@ -400,39 +408,68 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
         </button>
       </form>
 
-      {/* History Log List */}
+      {/* History Log List - Menampilkan Riwayat Walaupun Bukan Tanggal Hari Ini */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-        <h2 className="text-sm font-bold text-white flex items-center justify-between mb-3">
-          <span className="flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-slate-400" />
-            Riwayat Input ({date})
-          </span>
-          <span className="text-xs text-slate-400">{todayLogs.length} Entri</span>
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-rose-400" />
+            Riwayat Hasil Produksi ({displayedLogs.length} Entri)
+          </h2>
 
-        {todayLogs.length === 0 ? (
+          {/* Filter Toggle */}
+          <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+            <button
+              type="button"
+              onClick={() => setHistoryFilter('all')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                historyFilter === 'all'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Semua Riwayat
+            </button>
+            <button
+              type="button"
+              onClick={() => setHistoryFilter('selected')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                historyFilter === 'selected'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Tanggal Ini ({date})
+            </button>
+          </div>
+        </div>
+
+        {displayedLogs.length === 0 ? (
           <p className="text-xs text-slate-500 text-center py-6">
-            Belum ada catatan produksi untuk tanggal {date}.
+            Belum ada riwayat hasil produksi yang tercatat.
           </p>
         ) : (
-          <div className="space-y-2">
-            {todayLogs.map((log) => (
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            {displayedLogs.map((log) => (
               <div
                 key={log.id}
-                className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 flex items-center justify-between"
+                className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between hover:border-slate-700 transition"
               >
-                <div>
+                <div className="min-w-0 pr-2">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-800 text-slate-300">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
                       {log.sku_code}
                     </span>
-                    <span className="text-xs font-bold text-white">
-                      {log.sku_name}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 flex items-center gap-1">
+                      <Calendar className="w-2.5 h-2.5 text-rose-400" />
+                      {log.date}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-1">
+                  <h3 className="text-xs font-bold text-white mt-1 truncate">
+                    {log.sku_name}
+                  </h3>
+                  <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-0.5">
                     <span>
-                      Hasil: <strong className="text-emerald-400 font-semibold">{formatKg(log.actual_kg)} Kg</strong>
+                      Hasil Jadi: <strong className="text-emerald-400 font-bold">{formatKg(log.actual_kg)} Kg</strong>
                     </span>
                   </div>
                   {log.bottleneck_reason && log.bottleneck_reason !== 'Normal / Lancar' && (
@@ -441,7 +478,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                     </div>
                   )}
                   {log.notes && (
-                    <p className="text-[10px] text-slate-500 mt-0.5 italic">
+                    <p className="text-[10px] text-slate-500 mt-0.5 italic truncate">
                       &ldquo;{log.notes}&rdquo;
                     </p>
                   )}
@@ -450,12 +487,12 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm(`Hapus catatan ${log.sku_name} (${log.actual_kg} Kg)?`)) {
+                    if (confirm(`Hapus catatan ${log.sku_name} (${log.actual_kg} Kg pada ${log.date})?`)) {
                       onDeleteLog(log.id);
                     }
                   }}
                   title="Hapus entri ini"
-                  className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                  className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

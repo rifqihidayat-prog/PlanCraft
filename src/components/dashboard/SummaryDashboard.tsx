@@ -7,6 +7,7 @@ import {
   WeeklySummary 
 } from '@/types';
 import { formatKg, formatPercent } from '@/lib/storage';
+import { WeeklyLineChart } from './WeeklyLineChart';
 import { 
   TrendingUp, 
   AlertTriangle, 
@@ -14,7 +15,6 @@ import {
   Target, 
   Scale, 
   Flame, 
-  Calendar,
   ChevronRight,
   Filter,
   ArrowUpRight
@@ -133,7 +133,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
           <select
             value={selectedWeekFilter}
             onChange={(e) => onSelectWeekFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-rose-500 focus:outline-none cursor-pointer"
+            className="bg-black border border-slate-800 focus:border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-0 cursor-pointer"
           >
             <option value="all">📊 Total Semua Week (Akumulasi)</option>
             {plans.map((p) => (
@@ -146,7 +146,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
           {!isAllWeeks && (
             <button
               onClick={onNavigateToPlanning}
-              className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
+              className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 transition"
             >
               Ubah Plan <ChevronRight className="w-3 h-3 ml-0.5" />
             </button>
@@ -200,7 +200,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
           </div>
         </div>
 
-        {/* 3-Box Key Metrics Grid (Tanpa Susut & Tanpa Yield) */}
+        {/* 3-Box Key Metrics Grid */}
         <div className="grid grid-cols-3 gap-2.5 pt-3 border-t border-slate-800/80">
           <div className="bg-slate-950/50 rounded-xl p-2.5 border border-slate-800">
             <div className="flex items-center space-x-1.5 text-slate-400 text-[11px] mb-1">
@@ -244,7 +244,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
           <span className="text-xs text-slate-400">{todayLogs.length} Entri</span>
         </div>
 
-        <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 flex items-center justify-between">
+        <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800 flex items-center justify-between">
           <div>
             <p className="text-[11px] text-slate-400">Total Hasil Produksi Jadi Hari Ini</p>
             <p className="text-2xl font-black text-emerald-400 mt-0.5">
@@ -260,6 +260,9 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Line Chart Tren Produksi Mingguan (Target vs Realisasi Garis) */}
+      <WeeklyLineChart plans={plans} logs={logs} />
 
       {/* Detail Capaian per SKU */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
@@ -282,15 +285,15 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
               return (
                 <div
                   key={item.sku_id}
-                  className="bg-slate-950/50 hover:bg-slate-950/80 transition border border-slate-800/80 rounded-xl p-3 space-y-2"
+                  className="bg-slate-950/50 hover:bg-slate-950/80 transition border border-slate-800 rounded-xl p-3 space-y-2"
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center space-x-1.5">
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
                           {item.sku_code}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
                           {item.category}
                         </span>
                       </div>

@@ -1,5 +1,5 @@
 import { ProductSKU, WeeklyProductionPlan, DailyProductionLog, WeeklySummary } from '@/types';
-import { DEFAULT_SKUS, INITIAL_PLAN, INITIAL_LOGS } from './mockData';
+import { DEFAULT_SKUS, INITIAL_PLANS, INITIAL_PLAN, INITIAL_LOGS } from './mockData';
 import { DEFAULT_GSHEET_ID } from './gsheet';
 
 const STORAGE_KEYS = {
@@ -37,16 +37,17 @@ export function saveStoredSKUs(skus: ProductSKU[]): void {
 }
 
 export function getStoredPlans(): WeeklyProductionPlan[] {
-  if (!isClient) return [INITIAL_PLAN];
+  if (!isClient) return INITIAL_PLANS;
   try {
     const data = localStorage.getItem(STORAGE_KEYS.PLANS);
     if (!data) {
-      localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify([INITIAL_PLAN]));
-      return [INITIAL_PLAN];
+      localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify(INITIAL_PLANS));
+      return INITIAL_PLANS;
     }
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_PLANS;
   } catch {
-    return [INITIAL_PLAN];
+    return INITIAL_PLANS;
   }
 }
 
