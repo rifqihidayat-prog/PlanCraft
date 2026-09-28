@@ -59,3 +59,12 @@ export interface GSheetSyncResult {
   count?: number;
   skus?: ProductSKU[];
 }
+
+export type UserRole = 'admin' | 'production';
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  name: string;
+  role: UserRole;
+}

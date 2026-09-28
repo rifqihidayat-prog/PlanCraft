@@ -1,21 +1,24 @@
 'use client';
 
-import React from 'react';
-import { Snowflake, Smartphone, Monitor, RefreshCw, Calendar } from 'lucide-react';
-import { WeeklyProductionPlan } from '@/types';
+import { Snowflake, Smartphone, Monitor, RefreshCw, Calendar, ShieldCheck, HardHat } from 'lucide-react';
+import { WeeklyProductionPlan, AuthUser } from '@/types';
 
 interface NavbarProps {
   activePlan: WeeklyProductionPlan;
+  currentUser: AuthUser;
   isMobileFrame: boolean;
   setIsMobileFrame: (val: boolean) => void;
   onRefresh: () => void;
+  onOpenLogin: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activePlan,
+  currentUser,
   isMobileFrame,
   setIsMobileFrame,
   onRefresh,
+  onOpenLogin,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-white shadow-md">
@@ -48,6 +51,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="font-semibold text-white">W{activePlan.week_number}</span>
             <span>({activePlan.year})</span>
           </div>
+
+          {/* User Role Switcher Button */}
+          <button
+            onClick={onOpenLogin}
+            title={`Akun aktif: ${currentUser.name}. Klik untuk ganti akun.`}
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition active:scale-95 ${
+              currentUser.role === 'admin'
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+            }`}
+          >
+            {currentUser.role === 'admin' ? (
+              <ShieldCheck className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            ) : (
+              <HardHat className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            )}
+            <span>{currentUser.role === 'admin' ? 'Admin' : 'Produksi'}</span>
+          </button>
 
           {/* Refresh button */}
           <button

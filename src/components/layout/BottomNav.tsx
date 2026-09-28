@@ -9,15 +9,18 @@ import {
   Boxes 
 } from 'lucide-react';
 
+import { UserRole } from '@/types';
+
 export type NavTab = 'dashboard' | 'input' | 'planning' | 'reports' | 'skus';
 
 interface BottomNavProps {
   currentTab: NavTab;
   setCurrentTab: (tab: NavTab) => void;
+  userRole?: UserRole;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setCurrentTab }) => {
-  const tabs = [
+export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setCurrentTab, userRole = 'admin' }) => {
+  const allTabs = [
     {
       id: 'dashboard' as NavTab,
       label: 'Dashboard',
@@ -45,6 +48,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setCurrentTab 
       icon: Boxes,
     },
   ];
+
+  // Tim Produksi: Sembunyikan Database SKU dan Plan
+  const tabs = allTabs.filter(tab => {
+    if (userRole === 'production') {
+      return tab.id !== 'planning' && tab.id !== 'skus';
+    }
+    return true;
+  });
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-2xl safe-area-bottom">
