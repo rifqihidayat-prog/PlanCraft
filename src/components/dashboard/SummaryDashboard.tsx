@@ -207,51 +207,6 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
     });
   }, [isAllWeeks, plans, currentPlan, logs, selectedWeekFilter]);
 
-  // Group targets by Category for accordion view
-  const categoryGroups = React.useMemo(() => {
-    const groups = new Map<string, {
-      category: string;
-      items: typeof targetSkuList;
-      totalTargetKg: number;
-      totalActualKg: number;
-      remainingKg: number;
-      percent: number;
-      isFinished: boolean;
-    }>();
-
-    targetSkuList.forEach(item => {
-      const cat = item.category || 'Lainnya';
-      if (!groups.has(cat)) {
-        groups.set(cat, {
-          category: cat,
-          items: [],
-          totalTargetKg: 0,
-          totalActualKg: 0,
-          remainingKg: 0,
-          percent: 0,
-          isFinished: false,
-        });
-      }
-      const g = groups.get(cat)!;
-      g.items.push(item);
-      g.totalTargetKg += item.target_kg;
-      g.totalActualKg += item.actual_kg;
-    });
-
-    return Array.from(groups.values()).map(g => {
-      const pct = g.totalTargetKg > 0 ? (g.totalActualKg / g.totalTargetKg) * 100 : 0;
-      const rem = Math.max(0, g.totalTargetKg - g.totalActualKg);
-      return {
-        ...g,
-        totalTargetKg: Math.round(g.totalTargetKg * 10) / 10,
-        totalActualKg: Math.round(g.totalActualKg * 10) / 10,
-        remainingKg: Math.round(rem * 10) / 10,
-        percent: Math.round(pct * 10) / 10,
-        isFinished: pct >= 100,
-      };
-    });
-  }, [targetSkuList]);
-
   return (
     <div className="space-y-4 pb-20">
       {/* Two-Tier Filter Bar: Bulan Kebutuhan + Minggu */}
@@ -435,143 +390,86 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
       {/* Line Chart Tren Produksi Mingguan (Target vs Realisasi Garis) */}
       <WeeklyLineChart plans={plans} logs={logs} />
 
-      {/* Detail Capaian per Kategori & SKU */}
+      {/* Detail Pencapaian per Barang (SKU) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
         <div className="border-b border-slate-800/80 pb-3">
           <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 text-rose-400" />
-            Detail Pencapaian per Kategori
+            Pencapaian per Barang
           </h2>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            Rincian target dan capaian per kategori barang ({categoryGroups.length} Kategori • {targetSkuList.length} Item SKU).
+            Daftar target dan realisasi hasil jadi per produk ({targetSkuList.length} Item SKU).
           </p>
         </div>
 
-        {categoryGroups.length === 0 ? (
+        {targetSkuList.length === 0 ? (
           <p className="text-xs text-slate-500 py-6 text-center">
             Belum ada target barang pada periode ini. Buka menu Plan untuk menambahkan barang.
           </p>
         ) : (
-          <div className="space-y-4">
-            {categoryGroups.map((group) => {
+          <div className="space-y-2.5">
+            {targetSkuList.map((item) => {
+              const isItemFinished = item.percent >= 100;
               return (
                 <div
-                  key={group.category}
-                  className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden transition"
+                  key={item.sku_id}
+                  className="bg-slate-950/80 hover:bg-slate-950 border border-slate-800/90 rounded-2xl p-3.5 space-y-2.5 transition"
                 >
-                  {/* Category Header */}
-                  <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/70 border-b border-slate-800/80">
-                    <div className="flex items-center space-x-2.5 min-w-0">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                        group.isFinished 
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                          : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                      }`}>
-                        {group.category.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <h3 className="text-xs font-bold text-white truncate">
-                            {group.category}
-                          </h3>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-900 text-slate-400 border border-slate-800 font-mono">
-                            {group.items.length} SKU
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                          {item.sku_code}
+                        </span>
+                        {item.category && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                            {item.category}
                           </span>
-                          {group.isFinished && (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                              Tuntas ✅
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-2 text-[11px] text-slate-400 mt-0.5">
-                          <span>Target: <strong className="text-slate-200">{formatKg(group.totalTargetKg)} Kg</strong></span>
-                          <span>•</span>
-                          <span>Hasil: <strong className="text-emerald-400">{formatKg(group.totalActualKg)} Kg</strong></span>
-                          <span>•</span>
-                          <span>Sisa: <strong className="text-rose-400">{formatKg(group.remainingKg)} Kg</strong></span>
-                        </div>
+                        )}
+                        {isItemFinished && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">
+                            Tuntas ✅
+                          </span>
+                        )}
                       </div>
+                      <h4 className="text-xs @min-[640px]:text-sm font-bold text-white mt-1 truncate">
+                        {item.sku_name}
+                      </h4>
                     </div>
 
-                    <div className="flex items-center space-x-3 shrink-0 self-end sm:self-auto">
-                      <div className="text-right">
-                        <span className={`text-xs font-black ${
-                          group.isFinished ? 'text-emerald-400' : 'text-white'
-                        }`}>
-                          {formatPercent(group.percent)}
-                        </span>
-                        <div className="w-20 bg-slate-800 rounded-full h-1.5 mt-1 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              group.isFinished ? 'bg-emerald-400' : group.percent >= 70 ? 'bg-amber-400' : 'bg-rose-500'
-                            }`}
-                            style={{ width: `${Math.min(100, Math.max(3, group.percent))}%` }}
-                          />
-                        </div>
-                      </div>
+                    <div className="text-right shrink-0">
+                      <span className={`text-xs @min-[640px]:text-sm font-black ${
+                        isItemFinished ? 'text-emerald-400' : 'text-white'
+                      }`}>
+                        {formatPercent(item.percent)}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Direct Items List */}
-                  <div className="p-3 bg-slate-950/40 space-y-2">
-                    {group.items.map((item) => {
-                      const isItemFinished = item.percent >= 100;
-                      return (
-                        <div
-                          key={item.sku_id}
-                          className="bg-slate-900/80 hover:bg-slate-900 border border-slate-800/90 rounded-xl p-3 space-y-2 transition"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center space-x-1.5">
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
-                                  {item.sku_code}
-                                </span>
-                              </div>
-                              <h4 className="text-xs font-bold text-white mt-1 truncate">
-                                {item.sku_name}
-                              </h4>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className={`text-xs font-black ${
-                                isItemFinished ? 'text-emerald-400' : 'text-slate-200'
-                              }`}>
-                                {formatPercent(item.percent)}
-                              </span>
-                              {isItemFinished && (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 inline ml-1" />
-                              )}
-                            </div>
-                          </div>
+                  {/* Progress bar */}
+                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        isItemFinished
+                          ? 'bg-emerald-400'
+                          : item.percent >= 70
+                          ? 'bg-amber-400'
+                          : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${Math.min(100, Math.max(2, item.percent))}%` }}
+                    />
+                  </div>
 
-                          {/* Progress bar */}
-                          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                isItemFinished
-                                  ? 'bg-emerald-400'
-                                  : item.percent >= 70
-                                  ? 'bg-amber-400'
-                                  : 'bg-rose-500'
-                              }`}
-                              style={{ width: `${Math.min(100, Math.max(2, item.percent))}%` }}
-                            />
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px] text-slate-400">
-                            <span>
-                              Hasil: <strong className="text-slate-200">{formatKg(item.actual_kg)} Kg</strong>
-                            </span>
-                            <span>
-                              Target: <strong className="text-slate-300">{formatKg(item.target_kg)} Kg</strong>
-                            </span>
-                            <span>
-                              Sisa: <strong className="text-rose-400">{formatKg(item.remaining_kg)} Kg</strong>
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="flex justify-between items-center text-[11px] text-slate-400 pt-0.5">
+                    <span>
+                      Hasil: <strong className="text-emerald-400 font-semibold">{formatKg(item.actual_kg)} Kg</strong>
+                    </span>
+                    <span>
+                      Target: <strong className="text-slate-200 font-semibold">{formatKg(item.target_kg)} Kg</strong>
+                    </span>
+                    <span>
+                      Sisa: <strong className="text-rose-400 font-semibold">{formatKg(item.remaining_kg)} Kg</strong>
+                    </span>
                   </div>
                 </div>
               );
