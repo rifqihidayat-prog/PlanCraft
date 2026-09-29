@@ -138,7 +138,9 @@ export default function HomePage() {
       return idx >= 0 ? prev.map(p => p.id === updatedPlan.id ? updatedPlan : p) : [...prev, updatedPlan];
     });
 
-    await saveProductionPlan(updatedPlan);
+    if (currentUser?.role === 'admin') {
+      await saveProductionPlan(updatedPlan);
+    }
     const currentPlans = getStoredPlans();
     const idx = currentPlans.findIndex(p => p.id === updatedPlan.id);
     const newPlans = idx >= 0 
@@ -150,13 +152,17 @@ export default function HomePage() {
   const handleSelectPlan = async (plan: WeeklyProductionPlan) => {
     setActivePlan(plan);
     setActivePlanId(plan.id);
-    await setActivePlanOnServer(plan.id);
+    if (currentUser?.role === 'admin') {
+      await setActivePlanOnServer(plan.id);
+    }
   };
 
   const handleUpdateSKUs = async (newSkus: ProductSKU[]) => {
     setSkus(newSkus);
     saveStoredSKUs(newSkus);
-    await saveSKUsToServer(newSkus);
+    if (currentUser?.role === 'admin') {
+      await saveSKUsToServer(newSkus);
+    }
   };
 
   const handleRefresh = async () => {

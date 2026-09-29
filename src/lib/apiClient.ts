@@ -80,6 +80,7 @@ export async function saveProductionPlan(plan: WeeklyProductionPlan): Promise<We
       credentials: 'include',
       body: JSON.stringify(plan),
     });
+    if (res.status === 403) return null;
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const json = await res.json();
     return json.success ? json.data : null;
@@ -97,6 +98,10 @@ export async function setActivePlanOnServer(planId: string): Promise<WeeklyProdu
       credentials: 'include',
       body: JSON.stringify({ planId }),
     });
+    if (res.status === 403) {
+      // Role produksi atau non-admin tidak berwenang mengubah default active plan di server
+      return null;
+    }
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const json = await res.json();
     return json.success ? json.data : null;
@@ -114,6 +119,7 @@ export async function saveSKUsToServer(skus: ProductSKU[]): Promise<boolean> {
       credentials: 'include',
       body: JSON.stringify({ skus }),
     });
+    if (res.status === 403) return false;
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const json = await res.json();
     return Boolean(json.success);
