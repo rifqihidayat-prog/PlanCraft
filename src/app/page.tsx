@@ -244,6 +244,7 @@ export default function HomePage() {
             plan={activePlan}
             skus={skus}
             logs={logs}
+            currentUser={currentUser}
             onSaveLog={handleSaveLog}
             onDeleteLog={handleDeleteLog}
           />

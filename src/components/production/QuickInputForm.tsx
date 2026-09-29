@@ -4,7 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   WeeklyProductionPlan, 
   DailyProductionLog, 
-  ProductSKU 
+  ProductSKU,
+  AuthUser 
 } from '@/types';
 import { formatKg } from '@/lib/storage';
 import confetti from 'canvas-confetti';
@@ -17,13 +18,15 @@ import {
   Search,
   Plus,
   X,
-  Calendar
+  Calendar,
+  Lock
 } from 'lucide-react';
 
 interface QuickInputFormProps {
   plan: WeeklyProductionPlan;
   skus: ProductSKU[];
   logs: DailyProductionLog[];
+  currentUser?: AuthUser | null;
   onSaveLog: (log: Omit<DailyProductionLog, 'id' | 'created_at'>) => void;
   onDeleteLog: (id: string) => void;
 }
@@ -42,10 +45,20 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
   plan,
   skus,
   logs,
+  currentUser,
   onSaveLog,
   onDeleteLog,
 }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Helper tanggal lokal sistem (YYYY-MM-DD)
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   // Default selected SKU from first target
   const [selectedSku, setSelectedSku] = useState<{
@@ -73,6 +86,9 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
   const [bottleneck, setBottleneck] = useState<string>('Normal / Lancar');
   const [notes, setNotes] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Jika akun produksi: tanggal dikunci ke todayStr. Jika admin: bebas pilih tanggal.
+  const effectiveDate = isAdmin ? date : todayStr;
 
   // History tab filter: 'all' = all dates, 'selected' = only selected date
   const [historyFilter, setHistoryFilter] = useState<'all' | 'selected'>('all');
@@ -144,7 +160,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
 
     onSaveLog({
       plan_id: plan.id,
-      date,
+      date: effectiveDate,
       sku_id: selectedSku.id,
       sku_name: selectedSku.name,
       sku_code: selectedSku.code,
@@ -172,10 +188,10 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
   // Filter logs based on historyFilter
   const displayedLogs = useMemo(() => {
     if (historyFilter === 'selected') {
-      return logs.filter(l => l.date === date);
+      return logs.filter(l => l.date === effectiveDate);
     }
     return logs; // Show all logs regardless of date!
-  }, [logs, historyFilter, date]);
+  }, [logs, historyFilter, effectiveDate]);
 
   return (
     <div className="space-y-4 pb-24">
@@ -201,16 +217,46 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
       <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
         {/* Date Selector */}
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">
-            Tanggal Produksi
-          </label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:outline-none focus:ring-0"
-            required
-          />
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-semibold text-slate-300">
+              Tanggal Produksi
+            </label>
+            {isAdmin ? (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                Admin: Bebas Pilih Tanggal
+              </span>
+            ) : (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium flex items-center gap-1">
+                <Lock className="w-2.5 h-2.5" />
+                Terkunci (Hari Ini)
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              type="date"
+              value={effectiveDate}
+              onChange={(e) => {
+                if (isAdmin) {
+                  setDate(e.target.value);
+                }
+              }}
+              disabled={!isAdmin}
+              readOnly={!isAdmin}
+              className={`w-full border rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-0 transition ${
+                isAdmin
+                  ? 'bg-slate-950 border-slate-800 focus:border-slate-700 text-white cursor-pointer'
+                  : 'bg-slate-950/70 border-slate-800/80 text-slate-300 cursor-not-allowed select-none opacity-80'
+              }`}
+              required
+            />
+          </div>
+          {!isAdmin && (
+            <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+              <Lock className="w-3 h-3 text-rose-400 shrink-0" />
+              <span>Khusus akun Tim Produksi, tanggal otomatis dikunci ke hari ini (<strong>{todayStr}</strong>) dan tidak dapat diubah.</span>
+            </p>
+          )}
         </div>
 
         {/* Search & Select SKU / Nama Barang (Garis Gelap Menyesuaikan) */}
@@ -448,7 +494,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Tanggal Ini ({date})
+              Tanggal Ini ({effectiveDate})
             </button>
           </div>
         </div>
@@ -494,18 +540,20 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm(`Hapus catatan ${log.sku_name} (${log.actual_kg} Kg pada ${log.date})?`)) {
-                      onDeleteLog(log.id);
-                    }
-                  }}
-                  title="Hapus entri ini"
-                  className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition shrink-0"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Hapus catatan ${log.sku_name} (${log.actual_kg} Kg pada ${log.date})?`)) {
+                        onDeleteLog(log.id);
+                      }
+                    }}
+                    title="Hapus entri ini (Admin)"
+                    className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ))}
           </div>

@@ -27,9 +27,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Data log tidak lengkap atau tidak valid' }, { status: 400 });
     }
 
+    // Validasi & Proteksi Tanggal Berdasarkan Role:
+    // - Akun Tim Produksi: Tanggal wajib hari ini (today), tidak boleh diedit atau dimanipulasi
+    // - Akun Admin: Bebas menentukan tanggal produksi (untuk input susulan atau penyesuaian)
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const logDate = auth.user?.role === 'admin' ? (body.date || todayStr) : todayStr;
+
     const created = addProductionLog({
       plan_id: body.plan_id,
-      date: body.date || new Date().toISOString().split('T')[0],
+      date: logDate,
       sku_id: body.sku_id,
       sku_code: body.sku_code || '',
       sku_name: body.sku_name || '',
