@@ -30,6 +30,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Data rencana produksi tidak valid' }, { status: 400 });
     }
 
+    if (!plan.month && plan.start_date) {
+      plan.month = Number(plan.start_date.split('-')[1]) || 10;
+    }
+
     savePlan(plan);
     return NextResponse.json({ success: true, data: plan });
   } catch (error) {

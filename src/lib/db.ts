@@ -75,6 +75,7 @@ function initSchemaAndSeed(db: Database.Database) {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       week_number INTEGER NOT NULL,
+      month INTEGER,
       year INTEGER NOT NULL,
       start_date TEXT NOT NULL,
       end_date TEXT NOT NULL,
@@ -109,6 +110,24 @@ function initSchemaAndSeed(db: Database.Database) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+  `);
+
+  // Migrasi Skema: Pastikan kolom 'month' ada di production_plans
+  const planCols = db.prepare('PRAGMA table_info(production_plans)').all() as Array<{ name: string }>;
+  if (!planCols.some(col => col.name === 'month')) {
+    db.exec('ALTER TABLE production_plans ADD COLUMN month INTEGER');
+  }
+
+  // Update data lama jika month belum terisi atau week_number masih ISO week > 5
+  db.exec(`
+    UPDATE production_plans 
+    SET month = CAST(strftime('%m', start_date) AS INTEGER) 
+    WHERE month IS NULL OR month = 0;
+
+    UPDATE production_plans SET week_number = 3, month = 9, title = 'Plan Produksi Minggu Ke-3 (September 2026)' WHERE id = 'plan-w38-2026' AND week_number > 5;
+    UPDATE production_plans SET week_number = 4, month = 9, title = 'Plan Produksi Minggu Ke-4 (September 2026)' WHERE id = 'plan-w39-2026' AND week_number > 5;
+    UPDATE production_plans SET week_number = 1, month = 10, title = 'Plan Produksi Minggu Ke-1 (Oktober 2026)' WHERE id = 'plan-w40-2026' AND week_number > 5;
+    UPDATE production_plans SET week_number = 2, month = 10, title = 'Plan Produksi Minggu Ke-2 (Oktober 2026)' WHERE id = 'plan-w41-2026' AND week_number > 5;
   `);
 
   // 2. Seed users and apply environment PINs once, then preserve UI changes.
@@ -187,7 +206,7 @@ function initSchemaAndSeed(db: Database.Database) {
   const planCount = db.prepare('SELECT COUNT(*) as count FROM production_plans').get() as { count: number };
   if (planCount.count === 0) {
     const insertPlan = db.prepare(
-      'INSERT INTO production_plans (id, title, week_number, year, start_date, end_date, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO production_plans (id, title, week_number, month, year, start_date, end_date, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     const insertTarget = db.prepare(
       'INSERT INTO plan_targets (id, plan_id, sku_id, sku_code, sku_name, category, target_kg) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -195,7 +214,7 @@ function initSchemaAndSeed(db: Database.Database) {
 
     const seedPlansTx = db.transaction((plans: WeeklyProductionPlan[]) => {
       for (const p of plans) {
-        insertPlan.run(p.id, p.title, p.week_number, p.year, p.start_date, p.end_date, p.status, p.notes || null);
+        insertPlan.run(p.id, p.title, p.week_number, p.month || 10, p.year, p.start_date, p.end_date, p.status, p.notes || null);
         for (const t of p.targets) {
           const targetId = `${p.id}_${t.sku_id}`;
           insertTarget.run(targetId, p.id, t.sku_id, t.sku_code, t.sku_name, t.category, t.target_kg);
@@ -294,10 +313,11 @@ export function upsertSKUs(skus: ProductSKU[]): void {
 
 export function getAllPlans(): WeeklyProductionPlan[] {
   const db = getDatabase();
-  const plans = db.prepare('SELECT * FROM production_plans ORDER BY year DESC, week_number DESC').all() as Array<{
+  const plans = db.prepare('SELECT * FROM production_plans ORDER BY year DESC, month DESC, week_number ASC').all() as Array<{
     id: string;
     title: string;
     week_number: number;
+    month?: number;
     year: number;
     start_date: string;
     end_date: string;
@@ -316,10 +336,13 @@ export function getAllPlans(): WeeklyProductionPlan[] {
       target_kg: number;
     }>;
 
+    const planMonth = p.month || Number(p.start_date.split('-')[1]) || 1;
+
     return {
       id: p.id,
       title: p.title,
       week_number: p.week_number,
+      month: planMonth,
       year: p.year,
       start_date: p.start_date,
       end_date: p.end_date,
@@ -362,11 +385,12 @@ export function getActivePlan(): WeeklyProductionPlan {
 export function savePlan(plan: WeeklyProductionPlan): void {
   const db = getDatabase();
   const upsertPlan = db.prepare(`
-    INSERT INTO production_plans (id, title, week_number, year, start_date, end_date, status, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO production_plans (id, title, week_number, month, year, start_date, end_date, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       week_number = excluded.week_number,
+      month = excluded.month,
       year = excluded.year,
       start_date = excluded.start_date,
       end_date = excluded.end_date,
@@ -381,7 +405,8 @@ export function savePlan(plan: WeeklyProductionPlan): void {
   `);
 
   const tx = db.transaction((p: WeeklyProductionPlan) => {
-    upsertPlan.run(p.id, p.title, p.week_number, p.year, p.start_date, p.end_date, p.status, p.notes || null);
+    const planMonth = p.month || Number(p.start_date.split('-')[1]) || 1;
+    upsertPlan.run(p.id, p.title, p.week_number, planMonth, p.year, p.start_date, p.end_date, p.status, p.notes || null);
     deleteTargets.run(p.id);
     for (const t of p.targets) {
       const targetId = `${p.id}_${t.sku_id}`;

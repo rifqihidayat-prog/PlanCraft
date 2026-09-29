@@ -4,7 +4,8 @@ import React from 'react';
 import { 
   WeeklyProductionPlan, 
   DailyProductionLog, 
-  WeeklySummary 
+  WeeklySummary,
+  getMonthName
 } from '@/types';
 import { formatKg, formatPercent } from '@/lib/storage';
 import { 
@@ -24,6 +25,8 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
   logs,
   summary,
 }) => {
+  const planMonth = plan.month || Number(plan.start_date.split('-')[1]) || 10;
+
   // Generate list of working days dates from start_date to end_date
   const getDatesBetween = (start: string, end: string) => {
     const dates: { dateStr: string; dayName: string; shortDate: string }[] = [];
@@ -57,7 +60,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
   // Export CSV handler (without susut and yield)
   const handleExportCSV = () => {
     const dateHeaders = weekDates.map(d => `${d.dayName} (${d.shortDate})`).join(',');
-    let csv = `Laporan Realisasi Produksi PlanCraft - Minggu ${plan.week_number} (${plan.year})\n`;
+    let csv = `Laporan Realisasi Produksi PlanCraft - Bulan ${getMonthName(planMonth)} Minggu Ke-${plan.week_number} (${plan.year})\n`;
     csv += `Periode: ${plan.start_date} s/d ${plan.end_date}\n\n`;
     csv += `Kode SKU,Nama Produk,Kategori,Target (Kg),${dateHeaders},Total Aktual (Kg),Selisih (Kg),Capaian (%)\n`;
 
@@ -83,7 +86,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `PlanCraft_Report_W${plan.week_number}_${plan.year}.csv`);
+    link.setAttribute('download', `PlanCraft_Report_${plan.year}_M${planMonth}_W${plan.week_number}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -99,7 +102,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
             Rekap & Laporan Evaluasi Mingguan
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Minggu Ke-{plan.week_number} ({plan.start_date} s/d {plan.end_date})
+            Bulan {getMonthName(planMonth)} {plan.year} • Minggu Ke-{plan.week_number} ({plan.start_date} s/d {plan.end_date})
           </p>
         </div>
 

@@ -169,10 +169,20 @@ export default function HomePage() {
     }
   };
 
-  // Calculate summary based on week filter
-  const targetPlansForSummary = selectedWeekFilter === 'all'
-    ? plans
-    : plans.filter(p => p.id === selectedWeekFilter);
+  // Calculate summary based on month and week filter
+  const targetPlansForSummary = React.useMemo(() => {
+    if (selectedWeekFilter === 'all') return plans;
+    if (selectedWeekFilter.startsWith('month-')) {
+      const parts = selectedWeekFilter.split('-');
+      const m = Number(parts[1]);
+      const y = Number(parts[2]);
+      return plans.filter(p => {
+        const pMonth = p.month || Number(p.start_date.split('-')[1]) || 10;
+        return pMonth === m && p.year === y;
+      });
+    }
+    return plans.filter(p => p.id === selectedWeekFilter);
+  }, [plans, selectedWeekFilter]);
 
   const summary: WeeklySummary = calculateWeeklySummary(
     targetPlansForSummary.length > 0 ? targetPlansForSummary : [activePlan],
@@ -259,8 +269,10 @@ export default function HomePage() {
         return (
           <WeeklyPlanManager
             plan={activePlan}
+            plans={plans}
             skus={skus}
             onSavePlan={handleSavePlan}
+            onSelectPlan={handleSelectPlan}
           />
         );
       case 'reports':

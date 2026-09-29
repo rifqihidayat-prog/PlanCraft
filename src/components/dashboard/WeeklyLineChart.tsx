@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { WeeklyProductionPlan, DailyProductionLog } from '@/types';
+import { WeeklyProductionPlan, DailyProductionLog, getMonthShortName } from '@/types';
 import { formatKg, formatPercent } from '@/lib/storage';
 import { TrendingUp, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 
@@ -16,8 +16,8 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
 }) => {
   const [activeTooltipIndex, setActiveTooltipIndex] = useState<number | null>(null);
 
-  // Sort plans by week_number ascending
-  const sortedPlans = [...plans].sort((a, b) => a.week_number - b.week_number);
+  // Sort plans chronologically by start_date ascending
+  const sortedPlans = [...plans].sort((a, b) => a.start_date.localeCompare(b.start_date));
 
   // Compute week data points
   const weekData = sortedPlans.map((plan) => {
@@ -26,12 +26,14 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
     const totalActual = planLogs.reduce((acc, l) => acc + (l.actual_kg || 0), 0);
     const percent = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
     const isAchieved = totalTarget > 0 && totalActual >= totalTarget;
+    const m = plan.month || Number(plan.start_date.split('-')[1]) || 10;
 
     return {
       id: plan.id,
       weekNumber: plan.week_number,
+      month: m,
       year: plan.year,
-      label: `W${plan.week_number}`,
+      label: `${getMonthShortName(m)} W${plan.week_number}`,
       dateRange: `${plan.start_date.slice(5)} s/d ${plan.end_date.slice(5)}`,
       targetKg: Math.round(totalTarget * 10) / 10,
       actualKg: Math.round(totalActual * 10) / 10,

@@ -34,14 +34,35 @@ export interface DailyProductionLog {
 export interface WeeklyProductionPlan {
   id: string;
   title: string;
-  week_number: number;
-  year: number;
-  start_date: string; // YYYY-MM-DD
-  end_date: string;   // YYYY-MM-DD
+  week_number: number; // 1 - 5 (Minggu ke-1 s/d Minggu ke-5)
+  month: number;       // 1 - 12 (Bulan kebutuhan: 1 = Januari ... 12 = Desember)
+  year: number;        // Tahun kebutuhan, misal 2026
+  start_date: string;  // YYYY-MM-DD
+  end_date: string;    // YYYY-MM-DD
   status: 'active' | 'completed' | 'draft';
   working_days?: number;
   targets: WeeklyTargetItem[];
   notes?: string;
+}
+
+export const MONTH_NAMES = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+export const MONTH_SHORT_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'
+];
+
+export function getMonthName(month?: number): string {
+  if (!month || month < 1 || month > 12) return 'Bulan';
+  return MONTH_NAMES[month - 1];
+}
+
+export function getMonthShortName(month?: number): string {
+  if (!month || month < 1 || month > 12) return 'Bln';
+  return MONTH_SHORT_NAMES[month - 1];
 }
 
 export interface WeeklySummary {

@@ -4,7 +4,9 @@ import React from 'react';
 import { 
   WeeklyProductionPlan, 
   DailyProductionLog, 
-  WeeklySummary 
+  WeeklySummary,
+  getMonthName,
+  getMonthShortName
 } from '@/types';
 import { formatKg, formatPercent } from '@/lib/storage';
 import { WeeklyLineChart } from './WeeklyLineChart';
@@ -15,14 +17,14 @@ import {
   Target, 
   Scale, 
   Flame, 
-  ChevronRight,
+  ChevronRight, 
   Filter,
   ArrowUpRight
 } from 'lucide-react';
 
 interface SummaryDashboardProps {
   plans: WeeklyProductionPlan[];
-  selectedWeekFilter: string; // 'all' or plan.id
+  selectedWeekFilter: string; // 'all' or plan.id or 'month-M-YYYY'
   onSelectWeekFilter: (val: string) => void;
   activePlan: WeeklyProductionPlan;
   logs: DailyProductionLog[];
@@ -43,6 +45,79 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
 }) => {
   const isAllWeeks = selectedWeekFilter === 'all';
   const currentPlan = isAllWeeks ? activePlan : (plans.find(p => p.id === selectedWeekFilter) || activePlan);
+
+  // Available months extracted from plans
+  const availableMonths = React.useMemo(() => {
+    const map = new Map<string, { month: number; year: number; label: string }>();
+    plans.forEach(p => {
+      const m = p.month || Number(p.start_date.split('-')[1]) || 10;
+      const y = p.year;
+      const key = `${m}-${y}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          month: m,
+          year: y,
+          label: `${getMonthName(m)} ${y}`,
+        });
+      }
+    });
+    return Array.from(map.entries()).sort((a, b) => {
+      if (b[1].year !== a[1].year) return b[1].year - a[1].year;
+      return b[1].month - a[1].month;
+    });
+  }, [plans]);
+
+  // Determine current selected month key
+  const currentMonthKey = React.useMemo(() => {
+    if (selectedWeekFilter === 'all') return 'all';
+    if (selectedWeekFilter.startsWith('month-')) {
+      const parts = selectedWeekFilter.split('-');
+      return `${parts[1]}-${parts[2]}`;
+    }
+    const found = plans.find(p => p.id === selectedWeekFilter);
+    if (found) {
+      const m = found.month || Number(found.start_date.split('-')[1]) || 10;
+      return `${m}-${found.year}`;
+    }
+    return 'all';
+  }, [selectedWeekFilter, plans]);
+
+  // Plans filtered by current month key (when not 'all')
+  const filteredMonthPlans = React.useMemo(() => {
+    if (currentMonthKey === 'all') return plans;
+    const [mStr, yStr] = currentMonthKey.split('-');
+    const m = Number(mStr);
+    const y = Number(yStr);
+    return plans
+      .filter(p => {
+        const pMonth = p.month || Number(p.start_date.split('-')[1]) || 10;
+        return pMonth === m && p.year === y;
+      })
+      .sort((a, b) => a.week_number - b.week_number);
+  }, [plans, currentMonthKey]);
+
+  const handleMonthChange = (monthKey: string) => {
+    if (monthKey === 'all') {
+      onSelectWeekFilter('all');
+    } else {
+      // Set to all weeks of this month
+      onSelectWeekFilter(`month-${monthKey}`);
+    }
+  };
+
+  const selectedMonthInfo = availableMonths.find(([k]) => k === currentMonthKey)?.[1];
+
+  // Title for hero card
+  let periodTitle = 'Pencapaian Akumulasi Semua Week';
+  if (selectedWeekFilter.startsWith('month-')) {
+    const parts = selectedWeekFilter.split('-');
+    const m = Number(parts[1]);
+    const y = Number(parts[2]);
+    periodTitle = `Pencapaian Akumulasi Bulan ${getMonthName(m)} ${y}`;
+  } else if (!isAllWeeks) {
+    const m = currentPlan.month || Number(currentPlan.start_date.split('-')[1]) || 10;
+    periodTitle = `Pencapaian Minggu Ke-${currentPlan.week_number} (${getMonthShortName(m)} ${currentPlan.year})`;
+  }
 
   // Today's stats
   const todayStr = new Date().toISOString().split('T')[0];
@@ -77,7 +152,19 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
 
   // Aggregate targets across all or selected plans for SKU breakdown
   const targetSkuList = React.useMemo(() => {
-    const plansToConsider = isAllWeeks ? plans : [currentPlan];
+    let plansToConsider = plans;
+    if (selectedWeekFilter.startsWith('month-')) {
+      const parts = selectedWeekFilter.split('-');
+      const m = Number(parts[1]);
+      const y = Number(parts[2]);
+      plansToConsider = plans.filter(p => {
+        const pMonth = p.month || Number(p.start_date.split('-')[1]) || 10;
+        return pMonth === m && p.year === y;
+      });
+    } else if (!isAllWeeks) {
+      plansToConsider = [currentPlan];
+    }
+
     const map = new Map<string, {
       sku_id: string;
       sku_code: string;
@@ -118,32 +205,71 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         remaining_kg: Math.round(remaining * 10) / 10,
       };
     });
-  }, [isAllWeeks, plans, currentPlan, logs]);
+  }, [isAllWeeks, plans, currentPlan, logs, selectedWeekFilter]);
 
   return (
     <div className="space-y-4 pb-20">
-      {/* Week Filter Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-2.5">
+      {/* Two-Tier Filter Bar: Bulan Kebutuhan + Minggu */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-3">
         <div className="flex items-center space-x-2 text-xs font-semibold text-slate-300">
           <Filter className="w-4 h-4 text-rose-500" />
           <span>Filter Periode Produksi:</span>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <select
-            value={selectedWeekFilter}
-            onChange={(e) => onSelectWeekFilter(e.target.value)}
-            className="bg-black border border-slate-800 focus:border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-0 cursor-pointer"
-          >
-            <option value="all">📊 Total Semua Week (Akumulasi)</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                Minggu Ke-{p.week_number} ({p.year}) - {p.start_date}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Tier 1: Bulan Kebutuhan */}
+          <div className="flex items-center space-x-1.5">
+            <span className="text-[11px] text-slate-400 font-medium">Bulan:</span>
+            <select
+              value={currentMonthKey}
+              onChange={(e) => handleMonthChange(e.target.value)}
+              className="bg-black border border-slate-800 focus:border-slate-700 text-white rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-0 cursor-pointer"
+            >
+              <option value="all">Semua Bulan</option>
+              {availableMonths.map(([key, val]) => (
+                <option key={key} value={key}>
+                  {val.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {!isAllWeeks && (
+          {/* Tier 2: Minggu Produksi (Week 1 - 5) */}
+          <div className="flex items-center space-x-1.5">
+            <span className="text-[11px] text-slate-400 font-medium">Pekan:</span>
+            <select
+              value={selectedWeekFilter}
+              onChange={(e) => onSelectWeekFilter(e.target.value)}
+              className="bg-black border border-slate-800 focus:border-slate-700 text-white rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-0 cursor-pointer"
+            >
+              {currentMonthKey === 'all' ? (
+                <>
+                  <option value="all">📊 Total Semua Pekan</option>
+                  {plans.map((p) => {
+                    const m = p.month || Number(p.start_date.split('-')[1]) || 10;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {getMonthShortName(m)} - Minggu Ke-{p.week_number}
+                      </option>
+                    );
+                  })}
+                </>
+              ) : (
+                <>
+                  <option value={`month-${currentMonthKey}`}>
+                    📅 Seluruh {selectedMonthInfo?.label || 'Bulan'} (Akumulasi W1-W5)
+                  </option>
+                  {filteredMonthPlans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      Minggu Ke-{p.week_number} (W{p.week_number}) • {p.start_date.slice(5)} s/d {p.end_date.slice(5)}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+          </div>
+
+          {!isAllWeeks && !selectedWeekFilter.startsWith('month-') && (
             <button
               onClick={onNavigateToPlanning}
               className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 transition"
@@ -161,7 +287,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         <div className="flex items-center justify-between mb-4">
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              {isAllWeeks ? 'Pencapaian Akumulasi Semua Week' : `Pencapaian Minggu Ke-${currentPlan.week_number}`}
+              {periodTitle}
             </span>
             <div className="flex items-baseline space-x-2 mt-1">
               <span className="text-4xl @min-[640px]:text-5xl font-black text-white tracking-tight">

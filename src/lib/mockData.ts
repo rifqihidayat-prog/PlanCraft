@@ -69,8 +69,9 @@ export const DEFAULT_SKUS: ProductSKU[] = [
 export const INITIAL_PLANS: WeeklyProductionPlan[] = [
   {
     id: 'plan-w38-2026',
-    title: 'Plan Produksi Minggu Ke-38 (Pertengahan September)',
-    week_number: 38,
+    title: 'Plan Produksi Minggu Ke-3 (September 2026)',
+    week_number: 3,
+    month: 9,
     year: 2026,
     start_date: '2026-09-14',
     end_date: '2026-09-19',
@@ -102,8 +103,9 @@ export const INITIAL_PLANS: WeeklyProductionPlan[] = [
   },
   {
     id: 'plan-w39-2026',
-    title: 'Plan Produksi Minggu Ke-39 (Akhir September)',
-    week_number: 39,
+    title: 'Plan Produksi Minggu Ke-4 (September 2026)',
+    week_number: 4,
+    month: 9,
     year: 2026,
     start_date: '2026-09-21',
     end_date: '2026-09-26',
@@ -135,8 +137,9 @@ export const INITIAL_PLANS: WeeklyProductionPlan[] = [
   },
   {
     id: 'plan-w40-2026',
-    title: 'Plan Produksi Minggu Ke-40 (Awal Oktober 2026)',
-    week_number: 40,
+    title: 'Plan Produksi Minggu Ke-1 (Oktober 2026)',
+    week_number: 1,
+    month: 10,
     year: 2026,
     start_date: '2026-09-28',
     end_date: '2026-10-03',
@@ -175,8 +178,9 @@ export const INITIAL_PLANS: WeeklyProductionPlan[] = [
   },
   {
     id: 'plan-w41-2026',
-    title: 'Plan Produksi Minggu Ke-41 (Pertengahan Oktober)',
-    week_number: 41,
+    title: 'Plan Produksi Minggu Ke-2 (Oktober 2026)',
+    week_number: 2,
+    month: 10,
     year: 2026,
     start_date: '2026-10-05',
     end_date: '2026-10-10',
