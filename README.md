@@ -48,15 +48,16 @@ cp .env.example .env
 ```
 Isi konfigurasi sesuai kebutuhan server.
 > ⚠️ **PENTING (Keamanan Server Production)**:
-> Pada mode produksi (`NODE_ENV=production`), server **mewajibkan** variabel `ADMIN_PIN` dan `PRODUCTION_PIN` disetel dengan PIN rahasia unik (server akan menolak berjalan jika kosong atau masih memakai default `1234`).
+> Pada mode produksi (`NODE_ENV=production`), server mewajibkan `ADMIN_PIN` dan `PRODUCTION_PIN` berisi PIN rahasia tepat 6 digit angka. Gunakan PIN yang berbeda untuk tiap akun.
 
 Contoh di `.env`:
 ```env
 PORT=3000
 NODE_ENV=production
-ADMIN_PIN=8899
-PRODUCTION_PIN=5566
+ADMIN_PIN=
+PRODUCTION_PIN=
 ```
+Isi dua variabel tersebut dengan PIN privat berbeda yang masing-masing tepat 6 digit sebelum server dijalankan.
 
 ### 4. Menjalankan dengan PM2 (Direkomendasikan)
 Tersedia konfigurasi [`ecosystem.config.js`](file:///c:/Users/rifqi.hidayat_hijrah/Documents/PlanCraft/ecosystem.config.js) untuk deployment production yang stabil:
@@ -76,10 +77,10 @@ pm2 restart plancraft --update-env
 
 | Username | Role | Konfigurasi PIN | Akses & Wewenang |
 | :--- | :--- | :--- | :--- |
-| `admin` | Admin PPIC | Via `ADMIN_PIN` di `.env` / PM2 | Akses penuh (Dashboard, Monitoring, Input Plan, Master SKU, Hapus Log, Edit Tanggal Bebas) |
-| `produksi` | Tim Produksi | Via `PRODUCTION_PIN` di `.env` / PM2 | Monitoring & Input Real-time Log Produksi (Tanggal otomatis terkunci ke hari ini, dilarang ubah target/SKU/active plan) |
+| `admin` | Admin PPIC | PIN awal via `ADMIN_PIN`; selanjutnya dari Pengaturan PIN | Akses penuh (Dashboard, Monitoring, Input Plan, Master SKU, Hapus Log, Edit Tanggal Bebas) |
+| `produksi` | Tim Produksi | PIN awal via `PRODUCTION_PIN`; selanjutnya dari Pengaturan PIN | Monitoring & Input Real-time Log Produksi (Tanggal otomatis terkunci ke hari ini, dilarang ubah target/SKU/active plan) |
 
-> **Catatan Keamanan**: PIN disimpan dalam bentuk hash scrypt dengan salt acak 16-byte di SQLite server. Setiap kali `ADMIN_PIN` atau `PRODUCTION_PIN` diperbarui di PM2 / `.env`, sistem akan otomatis menyinkronkan hash PIN ke database server.
+> **Catatan Keamanan**: PIN disimpan sebagai hash scrypt di SQLite. Environment PIN hanya digunakan sekali saat bootstrap akun; sesudah itu user mengganti PIN dari menu Pengaturan PIN dengan memasukkan PIN lama, dan restart tidak menimpa perubahan tersebut.
 
 ---
 
@@ -90,6 +91,7 @@ pm2 restart plancraft --update-env
 | `/api/auth` | `POST` | Publik | Login dengan username & PIN, membuat sesi server |
 | `/api/auth/me` | `GET` | Authenticated | Mengecek status sesi pengguna saat ini |
 | `/api/auth/logout` | `POST` | Authenticated | Menghapus sesi server & membersihkan cookie |
+| `/api/auth/change-pin` | `POST` | Authenticated | Mengganti PIN akun yang sedang login setelah validasi PIN lama |
 | `/api/data` | `GET` | Authenticated | Mengambil seluruh data awal (SKU, Plan, Log, Info User) |
 | `/api/plans` | `GET` | Authenticated | Mengambil daftar rencana mingguan |
 | `/api/plans` | `POST` | `admin` (403 for prod) | Menyimpan / memperbarui target rencana mingguan |

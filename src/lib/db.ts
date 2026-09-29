@@ -7,6 +7,7 @@ import { DEFAULT_SKUS, INITIAL_PLANS, INITIAL_LOGS } from './mockData';
 
 const DB_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'plancraft.db');
+const PIN_ENV_BOOTSTRAP_KEY = 'pin_env_bootstrap_v1';
 
 let dbInstance: Database.Database | null = null;
 
@@ -110,51 +111,61 @@ function initSchemaAndSeed(db: Database.Database) {
     );
   `);
 
-  // 2. Auto-seed Users if empty, or sync PINs from environment
+  // 2. Seed users and apply environment PINs once, then preserve UI changes.
   const envAdminPin = process.env.ADMIN_PIN?.trim();
   const envProdPin = process.env.PRODUCTION_PIN?.trim();
   const isBuilding = process.env.NEXT_PHASE === 'phase-production-build' || process.env.npm_lifecycle_event === 'build';
+  const isProductionRuntime = !isBuilding && process.env.NODE_ENV === 'production';
 
-  // Proteksi Keamanan Kritis:
-  // Di server production, ADMIN_PIN dan PRODUCTION_PIN wajib disetel di PM2 / .env
-  // dan dilarang menggunakan PIN bawaan "1234".
-  if (!isBuilding && process.env.NODE_ENV === 'production') {
+  if (isProductionRuntime) {
     if (!envAdminPin || !envProdPin) {
       throw new Error(
-        '[Security Exception] Server production mewajibkan variabel environment ADMIN_PIN dan PRODUCTION_PIN disetel (tidak boleh kosong). Silakan atur di PM2 / file .env sebelum menjalankan server.'
+        '[Security Exception] Server production mewajibkan ADMIN_PIN dan PRODUCTION_PIN disetel.'
       );
     }
-    if (envAdminPin === '1234' || envProdPin === '1234') {
+    if (!/^\d{6}$/.test(envAdminPin) || !/^\d{6}$/.test(envProdPin)) {
       throw new Error(
-        '[Security Exception] ADMIN_PIN dan PRODUCTION_PIN tidak boleh menggunakan nilai default "1234" di server production. Gunakan PIN rahasia unik.'
+        '[Security Exception] ADMIN_PIN dan PRODUCTION_PIN harus tepat 6 digit angka.'
       );
     }
   }
 
-  const defaultAdminPin = envAdminPin || '1234';
-  const defaultProdPin = envProdPin || '1234';
+  const defaultAdminPin = envAdminPin || '123456';
+  const defaultProdPin = envProdPin || '654321';
 
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
   if (userCount.count === 0) {
     const insertUser = db.prepare('INSERT INTO users (id, username, name, role, pin) VALUES (?, ?, ?, ?, ?)');
-    insertUser.run('user-admin', 'admin', 'Admin PPIC', 'admin', hashPin(defaultAdminPin));
-    insertUser.run('user-prod', 'produksi', 'Tim Produksi', 'production', hashPin(defaultProdPin));
-  } else {
-    // Sinkronkan PIN dari environment jika disediakan (berguna saat admin memperbarui PIN di PM2 / .env)
-    if (envAdminPin) {
-      db.prepare('UPDATE users SET pin = ? WHERE username = ?').run(hashPin(envAdminPin), 'admin');
-    }
-    if (envProdPin) {
-      db.prepare('UPDATE users SET pin = ? WHERE username = ?').run(hashPin(envProdPin), 'produksi');
-    }
+    const seedUsers = db.transaction(() => {
+      insertUser.run('user-admin', 'admin', 'Admin PPIC', 'admin', hashPin(defaultAdminPin));
+      insertUser.run('user-prod', 'produksi', 'Tim Produksi', 'production', hashPin(defaultProdPin));
+    });
+    seedUsers();
+  }
 
-    // Otomatis upgrade PIN plain text lama menjadi scrypt hash terenkripsi jika belum
-    const existingUsers = db.prepare('SELECT id, pin FROM users').all() as Array<{ id: string; pin: string }>;
-    const updatePinStmt = db.prepare('UPDATE users SET pin = ? WHERE id = ?');
-    for (const u of existingUsers) {
-      if (!u.pin.includes(':')) {
-        updatePinStmt.run(hashPin(u.pin), u.id);
+  const pinBootstrapSetting = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(
+    PIN_ENV_BOOTSTRAP_KEY
+  ) as { value: string } | undefined;
+  if (isProductionRuntime && !pinBootstrapSetting) {
+    const bootstrapPins = db.transaction(() => {
+      const updatePin = db.prepare('UPDATE users SET pin = ? WHERE username = ?');
+      if (updatePin.run(hashPin(envAdminPin!), 'admin').changes !== 1) {
+        throw new Error('[Security Exception] Akun admin tidak ditemukan untuk bootstrap PIN.');
       }
+      if (updatePin.run(hashPin(envProdPin!), 'produksi').changes !== 1) {
+        throw new Error('[Security Exception] Akun produksi tidak ditemukan untuk bootstrap PIN.');
+      }
+      db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run(PIN_ENV_BOOTSTRAP_KEY, 'complete');
+    });
+    bootstrapPins();
+  }
+
+  // Upgrade legacy plaintext PINs without overwriting PINs changed from settings.
+  const existingUsers = db.prepare('SELECT id, pin FROM users').all() as Array<{ id: string; pin: string }>;
+  const updatePinStmt = db.prepare('UPDATE users SET pin = ? WHERE id = ?');
+  for (const user of existingUsers) {
+    if (!user.pin.includes(':')) {
+      updatePinStmt.run(hashPin(user.pin), user.id);
     }
   }
 
@@ -448,7 +459,7 @@ export function deleteProductionLog(id: string): boolean {
 export function verifyUserCredentials(username: string, pin: string): AuthUser | null {
   const db = getDatabase();
   const cleanUsername = username.trim().toLowerCase();
-  const cleanPin = pin.trim();
+  if (!/^\d{6}$/.test(pin)) return null;
 
   const user = db.prepare('SELECT id, username, name, role, pin FROM users WHERE LOWER(username) = ?').get(
     cleanUsername
@@ -456,7 +467,7 @@ export function verifyUserCredentials(username: string, pin: string): AuthUser |
 
   if (!user) return null;
 
-  if (!verifyPin(cleanPin, user.pin)) {
+  if (!verifyPin(pin, user.pin)) {
     return null;
   }
 
@@ -466,6 +477,21 @@ export function verifyUserCredentials(username: string, pin: string): AuthUser |
     name: user.name,
     role: user.role,
   };
+}
+
+export function changeUserPin(userId: string, currentPin: string, newPin: string): boolean {
+  if (!/^\d{6}$/.test(currentPin) || !/^\d{6}$/.test(newPin)) return false;
+
+  const db = getDatabase();
+  const user = db.prepare('SELECT pin FROM users WHERE id = ?').get(userId) as { pin: string } | undefined;
+  if (!user || !verifyPin(currentPin, user.pin)) return false;
+
+  const result = db.prepare('UPDATE users SET pin = ? WHERE id = ? AND pin = ?').run(
+    hashPin(newPin),
+    userId,
+    user.pin
+  );
+  return result.changes === 1;
 }
 
 // ==================== SESSION MANAGEMENT ====================
@@ -573,4 +599,3 @@ export function migrateBrowserData(
 
   return { migratedLogs, migratedPlans, migratedSkus };
 }
-

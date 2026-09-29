@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Snowflake, 
   Smartphone, 
@@ -11,9 +11,12 @@ import {
   HardHat, 
   LogOut,
   ChevronDown,
-  Check
+  Check,
+  KeyRound,
+  X
 } from 'lucide-react';
 import { WeeklyProductionPlan, AuthUser } from '@/types';
+import { changePinOnServer } from '@/lib/apiClient';
 
 interface NavbarProps {
   activePlan: WeeklyProductionPlan;
@@ -36,7 +39,53 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   onLogout,
 }) => {
+  const pinDialogRef = useRef<HTMLDialogElement>(null);
   const [isWeekDropdownOpen, setIsWeekDropdownOpen] = useState(false);
+  const [isPinDialogOpen, setIsPinDialogOpen] = useState(false);
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [isSavingPin, setIsSavingPin] = useState(false);
+  const [pinFeedback, setPinFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
+
+  useEffect(() => {
+    const dialog = pinDialogRef.current;
+    if (isPinDialogOpen && dialog && !dialog.open) dialog.showModal();
+  }, [isPinDialogOpen]);
+
+  const closePinDialog = () => {
+    if (isSavingPin) return;
+    setIsPinDialogOpen(false);
+    setCurrentPin('');
+    setNewPin('');
+    setConfirmPin('');
+    setPinFeedback(null);
+  };
+
+  const handleChangePin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(currentPin) || !/^\d{6}$/.test(newPin) || !/^\d{6}$/.test(confirmPin)) {
+      setPinFeedback({ type: 'error', message: 'Semua PIN harus terdiri dari tepat 6 angka.' });
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setPinFeedback({ type: 'error', message: 'Konfirmasi PIN baru tidak sama.' });
+      return;
+    }
+
+    setIsSavingPin(true);
+    setPinFeedback(null);
+    const result = await changePinOnServer(currentPin, newPin);
+    setIsSavingPin(false);
+    if (result.success) {
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmPin('');
+      setPinFeedback({ type: 'success', message: result.message || 'PIN berhasil diubah.' });
+    } else {
+      setPinFeedback({ type: 'error', message: result.message || 'PIN tidak berhasil diubah.' });
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-white shadow-md">
@@ -162,6 +211,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{currentUser.role === 'admin' ? 'Admin' : 'Produksi'}</span>
           </div>
 
+          <button
+            type="button"
+            onClick={() => {
+              setPinFeedback(null);
+              setIsPinDialogOpen(true);
+            }}
+            title="Pengaturan PIN"
+            aria-label="Pengaturan PIN"
+            aria-haspopup="dialog"
+            aria-expanded={isPinDialogOpen}
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-300 hover:text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Ganti PIN</span>
+          </button>
+
           {/* Logout Button */}
           <button
             onClick={onLogout}
@@ -201,6 +266,118 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
       </div>
+
+      {isPinDialogOpen && (
+        <dialog
+          ref={pinDialogRef}
+          aria-labelledby="change-pin-title"
+          className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-slate-700 bg-slate-950 p-5 text-white shadow-2xl backdrop:bg-black/75"
+          onCancel={(event) => {
+            if (isSavingPin) event.preventDefault();
+          }}
+          onClose={closePinDialog}
+          onClick={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (
+              event.clientX < bounds.left || event.clientX > bounds.right ||
+              event.clientY < bounds.top || event.clientY > bounds.bottom
+            ) closePinDialog();
+          }}
+        >
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 id="change-pin-title" className="text-lg font-bold">Pengaturan PIN</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                Ganti PIN akun <span className="font-semibold text-slate-200">{currentUser.username}</span>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closePinDialog}
+              disabled={isSavingPin}
+              aria-label="Tutup pengaturan PIN"
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {pinFeedback?.type === 'success' ? (
+            <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+              {pinFeedback.message}
+            </p>
+          ) : (
+            <form onSubmit={handleChangePin} className="space-y-3">
+                <label className="block text-xs font-semibold text-slate-300">
+                  PIN lama
+                  <input
+                    type="password"
+                    value={currentPin}
+                    onChange={(event) => setCurrentPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    autoComplete="current-password"
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-rose-500"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-slate-300">
+                  PIN baru
+                  <input
+                    type="password"
+                    value={newPin}
+                    onChange={(event) => setNewPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    autoComplete="new-password"
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-rose-500"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-slate-300">
+                  Ulangi PIN baru
+                  <input
+                    type="password"
+                    value={confirmPin}
+                    onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    autoComplete="new-password"
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-rose-500"
+                  />
+                </label>
+
+                {pinFeedback?.type === 'error' && (
+                  <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                    {pinFeedback.message}
+                  </p>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closePinDialog}
+                    disabled={isSavingPin}
+                    className="flex-1 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-900 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingPin}
+                    className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-500 active:scale-[0.99] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-300"
+                  >
+                    {isSavingPin ? 'Menyimpan…' : 'Simpan PIN'}
+                  </button>
+                </div>
+            </form>
+          )}
+        </dialog>
+      )}
     </header>
   );
 };

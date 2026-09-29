@@ -145,6 +145,24 @@ export async function loginOnServer(
   }
 }
 
+export async function changePinOnServer(
+  currentPin: string,
+  newPin: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const res = await fetch('/api/auth/change-pin', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
+      body: JSON.stringify({ currentPin, newPin }),
+    });
+    const json = await res.json();
+    return { success: Boolean(res.ok && json.success), message: json.message };
+  } catch {
+    return { success: false, message: 'Gagal terhubung ke server.' };
+  }
+}
+
 export async function checkSession(): Promise<AuthUser | null> {
   try {
     const res = await fetch('/api/auth/me', {

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { AuthUser } from '@/types';
-import { loginWithCredentials, saveStoredUser } from '@/lib/auth';
+import { saveStoredUser } from '@/lib/auth';
 import { loginOnServer } from '@/lib/apiClient';
 import { 
   Snowflake, 
@@ -10,8 +10,6 @@ import {
   User, 
   Eye, 
   EyeOff, 
-  ShieldCheck, 
-  HardHat, 
   ArrowRight, 
   AlertCircle 
 } from 'lucide-react';
@@ -34,7 +32,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
       return;
     }
     if (!pin.trim()) {
-      setErrorMsg('Silakan masukkan PIN / Password');
+      setErrorMsg('Silakan masukkan PIN 6 digit');
+      return;
+    }
+    if (!/^\d{6}$/.test(pin)) {
+      setErrorMsg('PIN harus tepat 6 angka');
       return;
     }
 
@@ -51,37 +53,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
         return;
       }
 
-      // 2. Jika server mengembalikan user tidak valid, tampilkan error
-      if (serverRes.message && serverRes.message !== 'Gagal terhubung ke server database') {
-        setIsLoading(false);
-        setErrorMsg(serverRes.message);
-        return;
-      }
-
-      // 3. Fallback jika server offline
-      const localRes = loginWithCredentials(username, pin);
       setIsLoading(false);
-      if (localRes.success && localRes.user) {
-        saveStoredUser(localRes.user);
-        onLogin(localRes.user);
-      } else {
-        setErrorMsg(localRes.message || 'Username atau PIN tidak sesuai');
-      }
+      setErrorMsg(serverRes.message || 'Username atau PIN tidak sesuai');
     } catch {
       setIsLoading(false);
       setErrorMsg('Terjadi kesalahan saat masuk');
     }
-  };
-
-  const handleQuickFill = (userType: 'admin' | 'produksi') => {
-    if (userType === 'admin') {
-      setUsername('admin');
-      setPin('1234');
-    } else {
-      setUsername('produksi');
-      setPin('1234');
-    }
-    setErrorMsg(null);
   };
 
   return (
@@ -143,7 +120,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           {/* PIN / Password Input */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              PIN / Password
+              PIN 6 digit
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -152,8 +129,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
               <input
                 type={showPin ? 'text' : 'password'}
                 value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="Masukkan PIN (Default: 1234)"
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                autoComplete="current-password"
+                placeholder="Masukkan 6 angka"
                 style={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl border text-sm text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 transition"
               />
@@ -183,49 +164,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             )}
           </button>
         </form>
-
-        {/* Quick Helper / Demo Credentials */}
-        <div className="mt-6 pt-5 border-t border-slate-900 space-y-2.5">
-          <p className="text-[11px] text-center font-medium text-slate-400">
-            Pilih cepat akun untuk uji coba:
-          </p>
-
-          <div className="grid grid-cols-2 gap-2">
-            {/* Quick Fill Produksi */}
-            <button
-              type="button"
-              onClick={() => handleQuickFill('produksi')}
-              style={{ backgroundColor: '#030712', borderColor: '#1e293b' }}
-              className="p-2.5 rounded-xl border text-left hover:border-emerald-500/50 transition active:scale-95 group"
-            >
-              <div className="flex items-center space-x-1.5 text-emerald-400 font-bold text-xs mb-0.5">
-                <HardHat className="w-3.5 h-3.5" />
-                <span>Tim Produksi</span>
-              </div>
-              <p className="text-[10px] text-slate-500 group-hover:text-slate-400">
-                User: <strong>produksi</strong><br />
-                PIN: <strong>1234</strong>
-              </p>
-            </button>
-
-            {/* Quick Fill Admin */}
-            <button
-              type="button"
-              onClick={() => handleQuickFill('admin')}
-              style={{ backgroundColor: '#030712', borderColor: '#1e293b' }}
-              className="p-2.5 rounded-xl border text-left hover:border-rose-500/50 transition active:scale-95 group"
-            >
-              <div className="flex items-center space-x-1.5 text-rose-400 font-bold text-xs mb-0.5">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Admin PPIC</span>
-              </div>
-              <p className="text-[10px] text-slate-500 group-hover:text-slate-400">
-                User: <strong>admin</strong><br />
-                PIN: <strong>1234</strong>
-              </p>
-            </button>
-          </div>
-        </div>
 
       </div>
     </div>
