@@ -100,9 +100,9 @@ export default function HomePage() {
     initAuthAndData();
   }, []);
 
-  // Proteksi Akses: Tim Produksi tidak boleh mengakses planning atau skus
+  // Proteksi Akses: Tim Produksi tidak boleh mengakses master database SKU (hanya admin)
   useEffect(() => {
-    if (currentUser?.role === 'production' && (currentTab === 'planning' || currentTab === 'skus')) {
+    if (currentUser?.role === 'production' && currentTab === 'skus') {
       setCurrentTab('dashboard');
     }
   }, [currentUser?.role, currentTab]);
@@ -277,6 +277,7 @@ export default function HomePage() {
             plan={activePlan}
             plans={plans}
             skus={skus}
+            currentUser={currentUser}
             onSavePlan={handleSavePlan}
             onSelectPlan={handleSelectPlan}
           />

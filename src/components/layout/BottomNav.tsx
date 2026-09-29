@@ -50,13 +50,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setCurrentTab,
     },
   ];
 
-  // Tim Produksi: Sembunyikan Database SKU dan Plan
-  const tabs = allTabs.filter(tab => {
-    if (userRole === 'production') {
-      return tab.id !== 'planning' && tab.id !== 'skus';
-    }
-    return true;
-  });
+  // Tim Produksi: Hanya sembunyikan Database SKU, tetap tampilkan Plan (Target Plan)
+  const tabs = allTabs
+    .map(tab => {
+      if (tab.id === 'planning' && userRole === 'production') {
+        return { ...tab, label: 'Target Plan' };
+      }
+      return tab;
+    })
+    .filter(tab => {
+      if (userRole === 'production') {
+        return tab.id !== 'skus';
+      }
+      return true;
+    });
 
   return (
     <nav className={`${isMobileFrame ? 'absolute' : 'fixed'} bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-2xl safe-area-bottom`}>
