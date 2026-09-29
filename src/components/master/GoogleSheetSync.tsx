@@ -129,7 +129,7 @@ export const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({
     <div className="space-y-4 pb-24">
       {/* Title Header */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-        <h1 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+        <h1 className="text-base @min-[640px]:text-lg font-bold text-white flex items-center gap-2">
           <Boxes className="w-5 h-5 text-rose-500" />
           Database SKU & Sinkronisasi Google Sheet
         </h1>
@@ -139,8 +139,8 @@ export const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({
       </div>
 
       {/* Google Sheet Sync Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 @min-[640px]:p-5 space-y-4 shadow-lg">
+        <div className="flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-2 border-b border-slate-800 pb-3">
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
               <span>Google Sheet: <strong>Database PlanCraft</strong></span>
@@ -173,7 +173,7 @@ export const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({
           <label className="block text-xs font-semibold text-slate-300">
             Google Spreadsheet ID / URL
           </label>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col @min-[640px]:flex-row gap-2">
             <input
               type="text"
               value={sheetId}
@@ -234,7 +234,7 @@ export const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({
         )}
 
         {/* Alternative CSV Upload */}
-        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 border-t border-slate-800/80">
+        <div className="pt-2 flex flex-col @min-[640px]:flex-row items-center justify-between gap-3 text-xs text-slate-400 border-t border-slate-800/80">
           <span>Opsi Alternatif (Bila di Cold Storage tanpa internet):</span>
           <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition flex items-center gap-1.5 active:scale-95">
             <UploadCloud className="w-4 h-4 text-rose-400" />
@@ -251,7 +251,7 @@ export const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({
 
       {/* Master SKU List */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
               <span>Daftar Master SKU Daging ({skus.length} Item)</span>
@@ -283,7 +283,7 @@ export const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({
         </div>
 
         {/* SKU Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+        <div className="grid grid-cols-1 @min-[640px]:grid-cols-2 gap-2.5 pt-1">
           {filteredSkus.map((sku) => (
             <div
               key={sku.id}

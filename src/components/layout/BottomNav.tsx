@@ -17,9 +17,10 @@ interface BottomNavProps {
   currentTab: NavTab;
   setCurrentTab: (tab: NavTab) => void;
   userRole?: UserRole;
+  isMobileFrame: boolean;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setCurrentTab, userRole = 'admin' }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setCurrentTab, userRole = 'admin', isMobileFrame }) => {
   const allTabs = [
     {
       id: 'dashboard' as NavTab,
@@ -58,7 +59,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, setCurrentTab,
   });
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-2xl safe-area-bottom">
+    <nav className={`${isMobileFrame ? 'absolute' : 'fixed'} bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-2xl safe-area-bottom`}>
       <div className="max-w-md mx-auto px-2 py-1.5 flex items-center justify-around">
         {tabs.map((tab) => {
           const Icon = tab.icon;

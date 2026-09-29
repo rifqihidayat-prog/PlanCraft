@@ -171,7 +171,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       {/* Title Header */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex items-center justify-between">
         <div>
-          <h1 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+          <h1 className="text-base @min-[640px]:text-lg font-bold text-white flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-rose-500" />
             Perencanaan Produksi Mingguan
           </h1>
@@ -196,8 +196,8 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
             Informasi Periode Produksi
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
+          <div className="grid grid-cols-1 @min-[640px]:grid-cols-3 gap-3">
+            <div className="@min-[640px]:col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1">
                 Judul Rencana
               </label>
@@ -293,7 +293,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
 
           <div className="space-y-2">
             {selectedSkuToAdd ? (
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center space-x-1.5">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-rose-400 font-semibold border border-slate-800">

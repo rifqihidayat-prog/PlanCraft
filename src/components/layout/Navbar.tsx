@@ -89,29 +89,29 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-white shadow-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 @min-[640px]:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
         {/* Brand */}
-        <div className="flex items-center space-x-3">
+        <div className="flex shrink-0 items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-950/40">
             <Snowflake className="w-5 h-5 text-white animate-pulse" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white">
+              <span className="font-extrabold text-lg @min-[640px]:text-xl tracking-tight text-white">
                 Plan<span className="text-rose-500">Craft</span>
               </span>
               <span className="hidden xs:inline-flex items-center text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
                 Frozen Meat
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">
+            <p className="hidden @min-[640px]:block text-[11px] text-slate-400 font-medium">
               1 Line • 1 Shift • Weekly Tracking
             </p>
           </div>
         </div>
 
         {/* Right side controls */}
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           {/* Active Week Selector Button */}
           <div className="relative">
             <button
@@ -224,7 +224,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-300 hover:text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
           >
             <KeyRound className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Ganti PIN</span>
+            <span className="hidden @min-[640px]:inline">Ganti PIN</span>
           </button>
 
           {/* Logout Button */}
@@ -250,7 +250,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setIsMobileFrame(!isMobileFrame)}
             title={isMobileFrame ? "Tampilan Fullscreen" : "Tampilan Simulasi Layar HP"}
-            className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200 transition font-medium"
+            className={`${isMobileFrame ? 'flex' : 'hidden @min-[768px]:flex'} items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200 transition font-medium`}
           >
             {isMobileFrame ? (
               <>

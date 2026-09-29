@@ -197,7 +197,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
     <div className="space-y-4 pb-24">
       {/* Title Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-        <h1 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+        <h1 className="text-base @min-[640px]:text-lg font-bold text-white flex items-center gap-2">
           <Scale className="w-5 h-5 text-rose-500" />
           Input Hasil Produksi Jadi
         </h1>
@@ -214,7 +214,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
       )}
 
       {/* Main Input Card (Garis gelap / hitam pekat) */}
-      <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+      <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 @min-[640px]:p-5 shadow-lg space-y-4">
         {/* Date Selector */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
@@ -391,7 +391,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
               value={actualKg}
               onChange={(e) => setActualKg(e.target.value)}
               placeholder="0.0"
-              className="w-full bg-slate-900 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-3 text-2xl sm:text-3xl font-black text-white placeholder-slate-600 focus:outline-none focus:ring-0 tracking-tight"
+              className="w-full bg-slate-900 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-3 text-2xl @min-[640px]:text-3xl font-black text-white placeholder-slate-600 focus:outline-none focus:ring-0 tracking-tight"
               required
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
@@ -466,7 +466,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
 
       {/* History Log List - Menampilkan Riwayat Walaupun Bukan Tanggal Hari Ini */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        <div className="flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-2 mb-3">
           <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
             <Clock className="w-4 h-4 text-rose-400" />
             Riwayat Hasil Produksi ({displayedLogs.length} Entri)

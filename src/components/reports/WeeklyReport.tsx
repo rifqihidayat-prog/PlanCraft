@@ -92,9 +92,9 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
   return (
     <div className="space-y-4 pb-24">
       {/* Title & Actions */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-3">
         <div>
-          <h1 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+          <h1 className="text-base @min-[640px]:text-lg font-bold text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-rose-500" />
             Rekap & Laporan Evaluasi Mingguan
           </h1>
@@ -106,7 +106,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
         <div className="flex items-center space-x-2">
           <button
             onClick={handleExportCSV}
-            className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/30"
+            className="flex-1 @min-[640px]:flex-none px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/30"
           >
             <FileSpreadsheet className="w-4 h-4" />
             <span>Export Excel (CSV)</span>
@@ -122,7 +122,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
       </div>
 
       {/* KPI Cards (Tanpa Susut & Tanpa Yield) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 @min-[640px]:grid-cols-4 gap-2.5">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
           <p className="text-[11px] text-slate-400">Target Pekan</p>
           <p className="text-lg font-black text-white mt-0.5">
@@ -157,7 +157,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
           Matriks Realisasi Harian Hasil Jadi (Kg)
         </h2>
 
-        <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="overflow-x-auto -mx-4 @min-[640px]:mx-0">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/70 text-slate-400">

@@ -91,9 +91,9 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
   const gridSteps = [0, yMax * 0.33, yMax * 0.66, yMax];
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 @min-[640px]:p-5 shadow-sm space-y-4">
       {/* Header & Legend */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <div className="flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-2.5">
         <div>
           <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 text-emerald-400" />
@@ -280,7 +280,7 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
       </div>
 
       {/* Week Achievement Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+      <div className="grid grid-cols-2 @min-[640px]:grid-cols-4 gap-2 pt-1">
         {weekData.map((d) => (
           <div
             key={d.id}

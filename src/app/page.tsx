@@ -287,7 +287,7 @@ export default function HomePage() {
     <div className={`min-h-screen bg-slate-950 flex flex-col ${isMobileFrame ? 'p-0 md:p-6 md:bg-slate-900/60' : ''}`}>
       {/* Wrapper - Either normal responsive or phone frame simulation */}
       <div
-        className={`flex-1 flex flex-col mx-auto w-full transition-all duration-300 ${
+        className={`@container flex-1 flex flex-col mx-auto w-full transition-all duration-300 ${
           isMobileFrame
             ? 'max-w-md bg-slate-950 md:rounded-[40px] md:border-[10px] md:border-slate-800 md:shadow-2xl md:overflow-hidden relative min-h-[844px]'
             : 'max-w-4xl'
@@ -306,7 +306,7 @@ export default function HomePage() {
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 px-3.5 sm:px-6 py-4 overflow-y-auto">
+        <main className="flex-1 px-3.5 @min-[640px]:px-6 py-4 overflow-y-auto">
           {renderTabContent()}
         </main>
 
@@ -315,6 +315,7 @@ export default function HomePage() {
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           userRole={currentUser.role}
+          isMobileFrame={isMobileFrame}
         />
       </div>
     </div>

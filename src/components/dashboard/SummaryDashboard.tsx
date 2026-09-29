@@ -123,7 +123,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
   return (
     <div className="space-y-4 pb-20">
       {/* Week Filter Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-2.5">
         <div className="flex items-center space-x-2 text-xs font-semibold text-slate-300">
           <Filter className="w-4 h-4 text-rose-500" />
           <span>Filter Periode Produksi:</span>
@@ -164,7 +164,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
               {isAllWeeks ? 'Pencapaian Akumulasi Semua Week' : `Pencapaian Minggu Ke-${currentPlan.week_number}`}
             </span>
             <div className="flex items-baseline space-x-2 mt-1">
-              <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
+              <span className="text-4xl @min-[640px]:text-5xl font-black text-white tracking-tight">
                 {formatPercent(summary.achievement_rate)}
               </span>
               <span className="text-xs text-slate-400">
@@ -207,7 +207,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
               <Target className="w-3.5 h-3.5 text-rose-400" />
               <span>Target Rencana</span>
             </div>
-            <p className="text-sm sm:text-base font-bold text-white">
+            <p className="text-sm @min-[640px]:text-base font-bold text-white">
               {formatKg(summary.total_target_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span>
             </p>
           </div>
@@ -217,7 +217,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
               <Scale className="w-3.5 h-3.5 text-emerald-400" />
               <span>Total Hasil Jadi</span>
             </div>
-            <p className="text-sm sm:text-base font-bold text-emerald-400">
+            <p className="text-sm @min-[640px]:text-base font-bold text-emerald-400">
               {formatKg(summary.total_actual_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span>
             </p>
           </div>
@@ -227,7 +227,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
               <Flame className="w-3.5 h-3.5 text-amber-400" />
               <span>Sisa Target</span>
             </div>
-            <p className="text-sm sm:text-base font-bold text-rose-400">
+            <p className="text-sm @min-[640px]:text-base font-bold text-rose-400">
               {formatKg(summary.remaining_target_kg)} <span className="text-[10px] font-normal text-slate-400">Kg</span>
             </p>
           </div>
