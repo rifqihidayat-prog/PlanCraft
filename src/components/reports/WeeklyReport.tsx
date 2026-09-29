@@ -1,31 +1,75 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   WeeklyProductionPlan, 
   DailyProductionLog, 
   WeeklySummary,
+  MONTH_NAMES,
   getMonthName
 } from '@/types';
-import { formatKg, formatPercent } from '@/lib/storage';
+import { formatKg, formatPercent, calculateWeeklySummary } from '@/lib/storage';
 import { 
   BarChart3, 
   Printer, 
-  FileSpreadsheet
+  FileSpreadsheet,
+  Calendar
 } from 'lucide-react';
 
 interface WeeklyReportProps {
   plan: WeeklyProductionPlan;
+  plans?: WeeklyProductionPlan[];
+  onSelectPlan?: (plan: WeeklyProductionPlan) => void;
   logs: DailyProductionLog[];
-  summary: WeeklySummary;
+  summary?: WeeklySummary;
 }
 
 export const WeeklyReport: React.FC<WeeklyReportProps> = ({
   plan,
+  plans = [],
+  onSelectPlan,
   logs,
-  summary,
 }) => {
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => {
+    return plan.month || Number(plan.start_date?.split('-')[1]) || 10;
+  });
+  const [selectedWeek, setSelectedWeek] = useState<number>(() => {
+    const w = Number(plan.week_number);
+    return w > 5 ? 1 : (w || 1);
+  });
+
+  useEffect(() => {
+    const m = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
+    const w = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
+    setSelectedMonth(m);
+    setSelectedWeek(w);
+  }, [plan.id, plan.month, plan.week_number, plan.start_date]);
+
+  const handlePeriodChange = (newMonth: number, newWeek: number) => {
+    setSelectedMonth(newMonth);
+    setSelectedWeek(newWeek);
+    if (plans && onSelectPlan) {
+      const matched = plans.find(
+        p => (p.month || Number(p.start_date.split('-')[1])) === newMonth && p.week_number === newWeek
+      );
+      if (matched) {
+        onSelectPlan(matched);
+      }
+    }
+  };
+
+  const isMatchedPlan = useMemo(() => {
+    const pMonth = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
+    const pWeek = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
+    return pMonth === selectedMonth && pWeek === selectedWeek;
+  }, [plan, selectedMonth, selectedWeek]);
+
   const planMonth = plan.month || Number(plan.start_date.split('-')[1]) || 10;
+
+  // Summary dihitung khusus untuk plan yang sedang aktif/terpilih
+  const effectiveSummary = useMemo(() => {
+    return calculateWeeklySummary([plan], logs);
+  }, [plan, logs]);
 
   // Generate list of working days dates from start_date to end_date
   const getDatesBetween = (start: string, end: string) => {
@@ -55,7 +99,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
 
   const weekDates = getDatesBetween(plan.start_date, plan.end_date);
   const planLogs = logs.filter(l => l.plan_id === plan.id);
-  const totalDiff = summary.total_actual_kg - summary.total_target_kg;
+  const totalDiff = effectiveSummary.total_actual_kg - effectiveSummary.total_target_kg;
 
   // Export CSV handler (without susut and yield)
   const handleExportCSV = () => {
@@ -79,7 +123,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
       csv += `"${target.sku_code}","${target.sku_name}","${target.category}",${target.target_kg},${dailyValues},${totalActual.toFixed(1)},${diff.toFixed(1)},${pct.toFixed(1)}%\n`;
     });
 
-    csv += `\nTOTAL RINGKASAN,,,,${summary.total_target_kg},${summary.total_actual_kg},${totalDiff.toFixed(1)},${summary.achievement_rate}%\n`;
+    csv += `\nTOTAL RINGKASAN,,,,${effectiveSummary.total_target_kg},${effectiveSummary.total_actual_kg},${totalDiff.toFixed(1)},${effectiveSummary.achievement_rate}%\n`;
 
     // Download trigger
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -94,6 +138,84 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
 
   return (
     <div className="space-y-4 pb-24">
+      {/* Period Filter: Bulan Kebutuhan & Week 1 - 5 */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-slate-200">
+            <Calendar className="w-4 h-4 text-rose-500" />
+            <span>Pilih Periode Laporan Mingguan:</span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <span className="text-[11px] text-slate-400 font-medium">Bulan Kebutuhan:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => handlePeriodChange(Number(e.target.value), selectedWeek)}
+              className="bg-black border border-slate-800 focus:border-slate-700 text-white rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none cursor-pointer"
+            >
+              {MONTH_NAMES.map((mName, idx) => (
+                <option key={mName} value={idx + 1}>
+                  {mName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Week 1 - 5 Selector Chips */}
+        <div className="grid grid-cols-5 gap-1.5 pt-1">
+          {[1, 2, 3, 4, 5].map((w) => {
+            const isSelected = selectedWeek === w;
+            const planForWeek = (plans || []).find(
+              p => (p.month || Number(p.start_date.split('-')[1])) === selectedMonth && p.week_number === w
+            );
+            const hasPlan = Boolean(planForWeek);
+
+            return (
+              <button
+                key={w}
+                type="button"
+                onClick={() => handlePeriodChange(selectedMonth, w)}
+                className={`py-2 px-1.5 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center border cursor-pointer ${
+                  isSelected
+                    ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-950/40'
+                    : hasPlan
+                    ? 'bg-slate-950 hover:bg-slate-800 text-slate-200 border-slate-800'
+                    : 'bg-slate-950/50 hover:bg-slate-900 text-slate-500 border-slate-900'
+                }`}
+              >
+                <span>Week {w}</span>
+                <span className="text-[9px] font-normal opacity-80 mt-0.5 truncate">
+                  {hasPlan ? `${planForWeek!.targets?.length || 0} Target` : 'Belum Ada'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Period Status Banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-800/80 gap-1.5">
+          <div className="flex items-center space-x-2">
+            <span className="text-slate-400">Laporan Pekan Terpilih:</span>
+            <span className="font-bold text-white">
+              {getMonthName(selectedMonth)} • Week {selectedWeek}
+            </span>
+            {isMatchedPlan ? (
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">
+                {plan.status === 'active' ? 'Aktif' : 'Tersedia'}
+              </span>
+            ) : (
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 font-bold">
+                Plan Belum Dibuat
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] text-slate-400">
+            {isMatchedPlan ? `${plan.start_date} s/d ${plan.end_date}` : 'Belum ada rencana produksi untuk minggu ini'}
+          </span>
+        </div>
+      </div>
+
       {/* Title & Actions */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-3">
         <div>
@@ -102,7 +224,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
             Rekap & Laporan Evaluasi Mingguan
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Bulan {getMonthName(planMonth)} {plan.year} • Minggu Ke-{plan.week_number} ({plan.start_date} s/d {plan.end_date})
+            Bulan {getMonthName(selectedMonth)} {plan.year} • Minggu Ke-{selectedWeek} ({plan.start_date} s/d {plan.end_date})
           </p>
         </div>
 
@@ -129,13 +251,13 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
           <p className="text-[11px] text-slate-400">Target Pekan</p>
           <p className="text-lg font-black text-white mt-0.5">
-            {formatKg(summary.total_target_kg)} <span className="text-xs font-normal text-slate-400">Kg</span>
+            {formatKg(effectiveSummary.total_target_kg)} <span className="text-xs font-normal text-slate-400">Kg</span>
           </p>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
           <p className="text-[11px] text-slate-400">Aktual Hasil Jadi</p>
           <p className="text-lg font-black text-emerald-400 mt-0.5">
-            {formatKg(summary.total_actual_kg)} <span className="text-xs font-normal text-slate-400">Kg</span>
+            {formatKg(effectiveSummary.total_actual_kg)} <span className="text-xs font-normal text-slate-400">Kg</span>
           </p>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
@@ -147,9 +269,9 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
           <p className="text-[11px] text-slate-400">Pencapaian %</p>
           <p className={`text-lg font-black mt-0.5 ${
-            summary.achievement_rate >= 95 ? 'text-emerald-400' : summary.achievement_rate >= 80 ? 'text-amber-400' : 'text-rose-400'
+            effectiveSummary.achievement_rate >= 95 ? 'text-emerald-400' : effectiveSummary.achievement_rate >= 80 ? 'text-amber-400' : 'text-rose-400'
           }`}>
-            {formatPercent(summary.achievement_rate)}
+            {formatPercent(effectiveSummary.achievement_rate)}
           </p>
         </div>
       </div>
@@ -178,50 +300,58 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {plan.targets.map(target => {
-                const skuLogs = planLogs.filter(l => l.sku_id === target.sku_id);
-                const actual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
-                const diff = actual - target.target_kg;
-                const pct = target.target_kg > 0 ? (actual / target.target_kg) * 100 : 0;
+              {(!plan.targets || plan.targets.length === 0) ? (
+                <tr>
+                  <td colSpan={weekDates.length + 5} className="py-8 text-center text-xs text-slate-500">
+                    Belum ada target produk yang direncanakan untuk pekan ini. Silakan buat rencana di menu Plan terlebih dahulu.
+                  </td>
+                </tr>
+              ) : (
+                plan.targets.map(target => {
+                  const skuLogs = planLogs.filter(l => l.sku_id === target.sku_id);
+                  const actual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
+                  const diff = actual - target.target_kg;
+                  const pct = target.target_kg > 0 ? (actual / target.target_kg) * 100 : 0;
 
-                return (
-                  <tr key={target.sku_id} className="hover:bg-slate-950/40 transition">
-                    <td className="py-2.5 px-3 font-medium text-white">
-                      <div className="truncate font-semibold">{target.sku_name}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{target.sku_code}</div>
-                    </td>
-                    <td className="py-2.5 px-2 text-right font-bold text-slate-300">
-                      {formatKg(target.target_kg)}
-                    </td>
+                  return (
+                    <tr key={target.sku_id} className="hover:bg-slate-950/40 transition">
+                      <td className="py-2.5 px-3 font-medium text-white">
+                        <div className="truncate font-semibold">{target.sku_name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">{target.sku_code}</div>
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-bold text-slate-300">
+                        {formatKg(target.target_kg)}
+                      </td>
 
-                    {weekDates.map(d => {
-                      const dayLogs = skuLogs.filter(l => l.date === d.dateStr);
-                      const daySum = dayLogs.reduce((acc, l) => acc + l.actual_kg, 0);
-                      return (
-                        <td key={d.dateStr} className={`py-2.5 px-2 text-right font-medium ${
-                          daySum > 0 ? 'text-slate-200' : 'text-slate-600'
-                        }`}>
-                          {daySum > 0 ? formatKg(daySum) : '-'}
-                        </td>
-                      );
-                    })}
+                      {weekDates.map(d => {
+                        const dayLogs = skuLogs.filter(l => l.date === d.dateStr);
+                        const daySum = dayLogs.reduce((acc, l) => acc + l.actual_kg, 0);
+                        return (
+                          <td key={d.dateStr} className={`py-2.5 px-2 text-right font-medium ${
+                            daySum > 0 ? 'text-slate-200' : 'text-slate-600'
+                          }`}>
+                            {daySum > 0 ? formatKg(daySum) : '-'}
+                          </td>
+                        );
+                      })}
 
-                    <td className="py-2.5 px-2 text-right font-bold text-emerald-400 bg-slate-950/30">
-                      {formatKg(actual)}
-                    </td>
-                    <td className={`py-2.5 px-2 text-right font-bold bg-slate-950/30 ${
-                      diff >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}>
-                      {diff >= 0 ? `+${formatKg(diff)}` : formatKg(diff)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-black bg-slate-950/30">
-                      <span className={pct >= 95 ? 'text-emerald-400' : pct >= 80 ? 'text-amber-400' : 'text-rose-400'}>
-                        {formatPercent(pct)}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td className="py-2.5 px-2 text-right font-bold text-emerald-400 bg-slate-950/30">
+                        {formatKg(actual)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold bg-slate-950/30 ${
+                        diff >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      }`}>
+                        {diff >= 0 ? `+${formatKg(diff)}` : formatKg(diff)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-black bg-slate-950/30">
+                        <span className={pct >= 95 ? 'text-emerald-400' : pct >= 80 ? 'text-amber-400' : 'text-rose-400'}>
+                          {formatPercent(pct)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

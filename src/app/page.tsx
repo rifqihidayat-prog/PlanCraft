@@ -288,6 +288,8 @@ export default function HomePage() {
         return (
           <WeeklyReport
             plan={activePlan}
+            plans={plans}
+            onSelectPlan={handleSelectPlan}
             logs={logs}
             summary={summary}
           />
