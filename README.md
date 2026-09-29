@@ -41,33 +41,45 @@ cd PlanCraft
 npm install
 ```
 
-### 3. Konfigurasi Environment (`.env`)
+### 3. Konfigurasi Environment (`.env` & PM2)
 Salin file template `.env.example` ke `.env`:
 ```bash
 cp .env.example .env
 ```
-Isi konfigurasi sesuai kebutuhan server (misal PORT=3000).
+Isi konfigurasi sesuai kebutuhan server.
+> ⚠️ **PENTING (Keamanan Server Production)**:
+> Pada mode produksi (`NODE_ENV=production`), server **mewajibkan** variabel `ADMIN_PIN` dan `PRODUCTION_PIN` disetel dengan PIN rahasia unik (server akan menolak berjalan jika kosong atau masih memakai default `1234`).
 
-### 4. Build & Jalankan Aplikasi
+Contoh di `.env`:
+```env
+PORT=3000
+NODE_ENV=production
+ADMIN_PIN=8899
+PRODUCTION_PIN=5566
+```
+
+### 4. Menjalankan dengan PM2 (Direkomendasikan)
+Tersedia konfigurasi [`ecosystem.config.js`](file:///c:/Users/rifqi.hidayat_hijrah/Documents/PlanCraft/ecosystem.config.js) untuk deployment production yang stabil:
 ```bash
 # Build production bundle
 npm run build
 
-# Menjalankan server production
-npm run start
+# Start atau restart via PM2
+pm2 start ecosystem.config.js
+# atau
+pm2 restart plancraft --update-env
 ```
-Aplikasi akan berjalan di `http://localhost:3000` (atau port yang ditentukan).
 
 ---
 
-## 🔐 Akun Bawaan (Default Seed Accounts)
+## 🔐 Akun & Hak Akses Pengguna
 
-| Username | Role | Default PIN | Akses |
+| Username | Role | Konfigurasi PIN | Akses & Wewenang |
 | :--- | :--- | :--- | :--- |
-| `admin` | Admin PPIC | `1234` | Full access (Dashboard, Monitoring, Input Plan, Master SKU) |
-| `produksi` | Operator / Tim Produksi | `1234` | Monitoring & Input Real-time Log Produksi |
+| `admin` | Admin PPIC | Via `ADMIN_PIN` di `.env` / PM2 | Akses penuh (Dashboard, Monitoring, Input Plan, Master SKU, Hapus Log, Edit Tanggal Bebas) |
+| `produksi` | Tim Produksi | Via `PRODUCTION_PIN` di `.env` / PM2 | Monitoring & Input Real-time Log Produksi (Tanggal otomatis terkunci ke hari ini, dilarang ubah target/SKU/active plan) |
 
-> **Catatan Keamanan**: PIN disimpan dalam bentuk hash scrypt di SQLite server. Setelah deployment, disarankan mengubah PIN master melalui database SQLite atau dashboard manajemen.
+> **Catatan Keamanan**: PIN disimpan dalam bentuk hash scrypt dengan salt acak 16-byte di SQLite server. Setiap kali `ADMIN_PIN` atau `PRODUCTION_PIN` diperbarui di PM2 / `.env`, sistem akan otomatis menyinkronkan hash PIN ke database server.
 
 ---
 

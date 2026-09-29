@@ -5,7 +5,8 @@ import { requireAuth } from '@/lib/serverAuth';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const auth = requireAuth(req);
+  // Hanya Admin yang diizinkan mengubah active plan di server
+  const auth = requireAuth(req, ['admin']);
   if (auth.error) return auth.error;
 
   try {

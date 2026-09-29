@@ -110,16 +110,45 @@ function initSchemaAndSeed(db: Database.Database) {
     );
   `);
 
-  // 2. Auto-seed Users if empty, or upgrade existing plain text PINs
+  // 2. Auto-seed Users if empty, or sync PINs from environment
+  const envAdminPin = process.env.ADMIN_PIN?.trim();
+  const envProdPin = process.env.PRODUCTION_PIN?.trim();
+  const isBuilding = process.env.NEXT_PHASE === 'phase-production-build' || process.env.npm_lifecycle_event === 'build';
+
+  // Proteksi Keamanan Kritis:
+  // Di server production, ADMIN_PIN dan PRODUCTION_PIN wajib disetel di PM2 / .env
+  // dan dilarang menggunakan PIN bawaan "1234".
+  if (!isBuilding && process.env.NODE_ENV === 'production') {
+    if (!envAdminPin || !envProdPin) {
+      throw new Error(
+        '[Security Exception] Server production mewajibkan variabel environment ADMIN_PIN dan PRODUCTION_PIN disetel (tidak boleh kosong). Silakan atur di PM2 / file .env sebelum menjalankan server.'
+      );
+    }
+    if (envAdminPin === '1234' || envProdPin === '1234') {
+      throw new Error(
+        '[Security Exception] ADMIN_PIN dan PRODUCTION_PIN tidak boleh menggunakan nilai default "1234" di server production. Gunakan PIN rahasia unik.'
+      );
+    }
+  }
+
+  const defaultAdminPin = envAdminPin || '1234';
+  const defaultProdPin = envProdPin || '1234';
+
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
   if (userCount.count === 0) {
-    const adminPin = process.env.ADMIN_PIN || '1234';
-    const prodPin = process.env.PRODUCTION_PIN || '1234';
     const insertUser = db.prepare('INSERT INTO users (id, username, name, role, pin) VALUES (?, ?, ?, ?, ?)');
-    insertUser.run('user-admin', 'admin', 'Admin PPIC', 'admin', hashPin(adminPin));
-    insertUser.run('user-prod', 'produksi', 'Tim Produksi', 'production', hashPin(prodPin));
+    insertUser.run('user-admin', 'admin', 'Admin PPIC', 'admin', hashPin(defaultAdminPin));
+    insertUser.run('user-prod', 'produksi', 'Tim Produksi', 'production', hashPin(defaultProdPin));
   } else {
-    // Otomatis upgrade PIN plain text menjadi scrypt hash terenkripsi
+    // Sinkronkan PIN dari environment jika disediakan (berguna saat admin memperbarui PIN di PM2 / .env)
+    if (envAdminPin) {
+      db.prepare('UPDATE users SET pin = ? WHERE username = ?').run(hashPin(envAdminPin), 'admin');
+    }
+    if (envProdPin) {
+      db.prepare('UPDATE users SET pin = ? WHERE username = ?').run(hashPin(envProdPin), 'produksi');
+    }
+
+    // Otomatis upgrade PIN plain text lama menjadi scrypt hash terenkripsi jika belum
     const existingUsers = db.prepare('SELECT id, pin FROM users').all() as Array<{ id: string; pin: string }>;
     const updatePinStmt = db.prepare('UPDATE users SET pin = ? WHERE id = ?');
     for (const u of existingUsers) {
@@ -484,17 +513,20 @@ export function cleanExpiredSessions(): void {
 
 // ==================== BROWSER DATA MIGRATION ====================
 
-export function migrateBrowserData(data: {
-  logs?: DailyProductionLog[];
-  plans?: WeeklyProductionPlan[];
-  skus?: ProductSKU[];
-}): { migratedLogs: number; migratedPlans: number; migratedSkus: number } {
+export function migrateBrowserData(
+  data: {
+    logs?: DailyProductionLog[];
+    plans?: WeeklyProductionPlan[];
+    skus?: ProductSKU[];
+  },
+  allowPlanAndSkuMutation: boolean = false
+): { migratedLogs: number; migratedPlans: number; migratedSkus: number } {
   const db = getDatabase();
   let migratedLogs = 0;
   let migratedPlans = 0;
   let migratedSkus = 0;
 
-  // 1. Migrasi Logs (jangan menimpa atau menduplikasi yang sudah ada)
+  // 1. Migrasi Logs (diizinkan untuk semua pengguna terautentikasi: admin & produksi)
   if (Array.isArray(data.logs) && data.logs.length > 0) {
     const checkLogStmt = db.prepare('SELECT id FROM production_logs WHERE id = ?');
     const insertLogStmt = db.prepare(`
@@ -524,18 +556,19 @@ export function migrateBrowserData(data: {
     logsTx(data.logs);
   }
 
-  // 2. Migrasi Plans jika ada plan kustom lokal
-  if (Array.isArray(data.plans) && data.plans.length > 0) {
-    for (const p of data.plans) {
-      savePlan(p);
-      migratedPlans++;
+  // 2. Migrasi Plans & SKUs (HANYA jika diizinkan/Admin, dicegah jika dipanggil oleh role produksi)
+  if (allowPlanAndSkuMutation) {
+    if (Array.isArray(data.plans) && data.plans.length > 0) {
+      for (const p of data.plans) {
+        savePlan(p);
+        migratedPlans++;
+      }
     }
-  }
 
-  // 3. Migrasi SKUs jika ada
-  if (Array.isArray(data.skus) && data.skus.length > 0) {
-    upsertSKUs(data.skus);
-    migratedSkus = data.skus.length;
+    if (Array.isArray(data.skus) && data.skus.length > 0) {
+      upsertSKUs(data.skus);
+      migratedSkus = data.skus.length;
+    }
   }
 
   return { migratedLogs, migratedPlans, migratedSkus };

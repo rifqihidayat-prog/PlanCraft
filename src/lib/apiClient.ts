@@ -197,6 +197,9 @@ export async function migrateBrowserDataOnServer(data: {
       credentials: 'include',
       body: JSON.stringify(data),
     });
+    if (!res.ok) {
+      return { success: false, message: `Server mengembalikan status ${res.status}` };
+    }
     const json = await res.json();
     return json;
   } catch (err) {

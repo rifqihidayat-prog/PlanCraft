@@ -68,15 +68,18 @@ export default function HomePage() {
         // 2. Jalankan migrasi satu kali jika browser memiliki data lama di localStorage
         if (typeof window !== 'undefined' && localStorage.getItem('plancraft_migrated_v1') !== 'true') {
           const oldLogs = getStoredLogs();
-          const oldPlans = getStoredPlans();
-          const oldSkus = getStoredSKUs();
+          const oldPlans = sessionUser.role === 'admin' ? getStoredPlans() : [];
+          const oldSkus = sessionUser.role === 'admin' ? getStoredSKUs() : [];
 
-          await migrateBrowserDataOnServer({
+          const res = await migrateBrowserDataOnServer({
             logs: oldLogs,
             plans: oldPlans,
             skus: oldSkus,
           });
-          localStorage.setItem('plancraft_migrated_v1', 'true');
+          // HANYA tandai selesai jika request migrasi berhasil diterima dan diproses server
+          if (res && res.success) {
+            localStorage.setItem('plancraft_migrated_v1', 'true');
+          }
         }
 
         // 3. Ambil data terpusat dari SQLite server
@@ -197,15 +200,18 @@ export default function HomePage() {
           // Cek & jalankan migrasi jika belum pernah
           if (typeof window !== 'undefined' && localStorage.getItem('plancraft_migrated_v1') !== 'true') {
             const oldLogs = getStoredLogs();
-            const oldPlans = getStoredPlans();
-            const oldSkus = getStoredSKUs();
+            const oldPlans = user.role === 'admin' ? getStoredPlans() : [];
+            const oldSkus = user.role === 'admin' ? getStoredSKUs() : [];
 
-            await migrateBrowserDataOnServer({
+            const res = await migrateBrowserDataOnServer({
               logs: oldLogs,
               plans: oldPlans,
               skus: oldSkus,
             });
-            localStorage.setItem('plancraft_migrated_v1', 'true');
+            // HANYA tandai selesai jika request migrasi berhasil diterima dan diproses server
+            if (res && res.success) {
+              localStorage.setItem('plancraft_migrated_v1', 'true');
+            }
           }
 
           // Tarik data SQLite terpusat
