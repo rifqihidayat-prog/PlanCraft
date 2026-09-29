@@ -6,22 +6,19 @@ import {
   Smartphone, 
   Monitor, 
   RefreshCw, 
-  Calendar, 
   ShieldCheck, 
   HardHat, 
   LogOut,
-  ChevronDown,
-  Check,
   KeyRound,
   X
 } from 'lucide-react';
-import { WeeklyProductionPlan, AuthUser, getMonthName, getMonthShortName } from '@/types';
+import { WeeklyProductionPlan, AuthUser } from '@/types';
 import { changePinOnServer } from '@/lib/apiClient';
 
 interface NavbarProps {
-  activePlan: WeeklyProductionPlan;
-  plans: WeeklyProductionPlan[];
-  onSelectPlan: (plan: WeeklyProductionPlan) => void;
+  activePlan?: WeeklyProductionPlan;
+  plans?: WeeklyProductionPlan[];
+  onSelectPlan?: (plan: WeeklyProductionPlan) => void;
   currentUser: AuthUser;
   isMobileFrame: boolean;
   setIsMobileFrame: (val: boolean) => void;
@@ -30,9 +27,6 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  activePlan,
-  plans = [],
-  onSelectPlan,
   currentUser,
   isMobileFrame,
   setIsMobileFrame,
@@ -40,7 +34,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
 }) => {
   const pinDialogRef = useRef<HTMLDialogElement>(null);
-  const [isWeekDropdownOpen, setIsWeekDropdownOpen] = useState(false);
   const [isPinDialogOpen, setIsPinDialogOpen] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -87,31 +80,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const activePlanMonth = activePlan.month || Number(activePlan.start_date.split('-')[1]) || 10;
-
-  // Group plans by month for clarity
-  const groupedPlans = React.useMemo(() => {
-    const groups: { [key: string]: { label: string; items: WeeklyProductionPlan[] } } = {};
-    plans.forEach(p => {
-      const m = p.month || Number(p.start_date.split('-')[1]) || 10;
-      const key = `${p.year}-${String(m).padStart(2, '0')}`;
-      if (!groups[key]) {
-        groups[key] = {
-          label: `${getMonthName(m)} ${p.year}`,
-          items: []
-        };
-      }
-      groups[key].items.push(p);
-    });
-    // Sort groups descending
-    return Object.entries(groups)
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([, val]) => ({
-        ...val,
-        items: [...val.items].sort((a, b) => a.week_number - b.week_number),
-      }));
-  }, [plans]);
-
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 @min-[640px]:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -137,95 +105,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right side controls */}
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {/* Active Week Selector Button */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsWeekDropdownOpen(!isWeekDropdownOpen)}
-              title="Klik untuk memilih minggu produksi"
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-rose-500/50 text-xs text-slate-200 transition active:scale-95 group cursor-pointer"
-            >
-              <Calendar className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
-              <span className="font-bold text-white">
-                {getMonthShortName(activePlanMonth)} W{activePlan.week_number}
-              </span>
-              <span className="text-slate-400 hidden xs:inline">({activePlan.year})</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isWeekDropdownOpen ? 'rotate-180 text-rose-400' : ''}`} />
-            </button>
-
-            {/* Dropdown Menu Minggu Produksi */}
-            {isWeekDropdownOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setIsWeekDropdownOpen(false)} 
-                />
-                <div 
-                  style={{ backgroundColor: '#050505', borderColor: '#1e293b' }}
-                  className="absolute right-0 top-full mt-2 z-50 w-72 border rounded-2xl shadow-2xl p-2 animate-in fade-in zoom-in-95"
-                >
-                  <div className="px-3 py-2 border-b border-slate-900 mb-1 flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Pilih Periode Produksi
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-mono font-bold">
-                      {plans.length} Week
-                    </span>
-                  </div>
-
-                  <div className="max-h-72 overflow-y-auto space-y-2">
-                    {groupedPlans.map((group) => (
-                      <div key={group.label} className="space-y-1">
-                        <div className="px-2 pt-1 text-[10px] font-bold text-rose-400/90 uppercase tracking-wider flex items-center gap-1">
-                          <span>📅 {group.label}</span>
-                        </div>
-                        {group.items.map((p) => {
-                          const isCurrent = p.id === activePlan.id;
-                          return (
-                            <button
-                              type="button"
-                              key={p.id}
-                              onClick={() => {
-                                onSelectPlan(p);
-                                setIsWeekDropdownOpen(false);
-                              }}
-                              style={{ 
-                                backgroundColor: isCurrent ? '#0f172a' : 'transparent',
-                                borderColor: isCurrent ? '#f43f5e' : 'transparent'
-                              }}
-                              className={`w-full text-left px-3 py-2 rounded-xl border transition flex items-center justify-between group hover:bg-slate-900 ${
-                                isCurrent ? 'font-semibold text-white' : 'text-slate-300'
-                              }`}
-                            >
-                              <div>
-                                <div className="flex items-center space-x-2">
-                                  <span className={`text-xs font-bold ${isCurrent ? 'text-rose-400' : 'text-white'}`}>
-                                    Minggu Ke-{p.week_number} (W{p.week_number})
-                                  </span>
-                                  {p.status === 'active' && (
-                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-semibold">
-                                      Aktif
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[10px] text-slate-500 mt-0.5">
-                                  {p.start_date} s/d {p.end_date}
-                                </p>
-                              </div>
-                              {isCurrent && (
-                                <Check className="w-4 h-4 text-rose-500 shrink-0" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
           {/* User Role Badge */}
           <div
             className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${

@@ -264,6 +264,8 @@ export default function HomePage() {
         return (
           <QuickInputForm
             plan={activePlan}
+            plans={plans}
+            onSelectPlan={handleSelectPlan}
             skus={skus}
             logs={logs}
             currentUser={currentUser}

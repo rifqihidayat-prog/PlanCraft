@@ -18,8 +18,7 @@ import {
   Scale, 
   Flame, 
   ChevronRight, 
-  ChevronDown,
-  Filter,
+  Filter, 
   ArrowUpRight
 } from 'lucide-react';
 
@@ -253,33 +252,6 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
     });
   }, [targetSkuList]);
 
-  // State untuk accordion kategori yang terbuka
-  const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>({});
-
-  const isCatOpen = (cat: string) => {
-    // Default terbuka agar data langsung terlihat pengguna
-    return openCategories[cat] !== undefined ? openCategories[cat] : true;
-  };
-
-  const toggleCategory = (cat: string) => {
-    setOpenCategories(prev => ({
-      ...prev,
-      [cat]: !isCatOpen(cat),
-    }));
-  };
-
-  const handleOpenAllCategories = () => {
-    const next: Record<string, boolean> = {};
-    categoryGroups.forEach(g => { next[g.category] = true; });
-    setOpenCategories(next);
-  };
-
-  const handleCloseAllCategories = () => {
-    const next: Record<string, boolean> = {};
-    categoryGroups.forEach(g => { next[g.category] = false; });
-    setOpenCategories(next);
-  };
-
   return (
     <div className="space-y-4 pb-20">
       {/* Two-Tier Filter Bar: Bulan Kebutuhan + Minggu */}
@@ -465,35 +437,14 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
 
       {/* Detail Capaian per Kategori & SKU */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-          <div>
-            <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-rose-400" />
-              Detail Pencapaian per Kategori
-            </h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Klik pada baris kategori untuk melihat rincian SKU ({categoryGroups.length} Kategori • {targetSkuList.length} Item SKU).
-            </p>
-          </div>
-
-          {categoryGroups.length > 0 && (
-            <div className="flex items-center space-x-1.5 text-xs">
-              <button
-                type="button"
-                onClick={handleOpenAllCategories}
-                className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 font-medium transition cursor-pointer"
-              >
-                Buka Semua
-              </button>
-              <button
-                type="button"
-                onClick={handleCloseAllCategories}
-                className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 font-medium transition cursor-pointer"
-              >
-                Tutup Semua
-              </button>
-            </div>
-          )}
+        <div className="border-b border-slate-800/80 pb-3">
+          <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+            <TrendingUp className="w-4 h-4 text-rose-400" />
+            Detail Pencapaian per Kategori
+          </h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Rincian target dan capaian per kategori barang ({categoryGroups.length} Kategori • {targetSkuList.length} Item SKU).
+          </p>
         </div>
 
         {categoryGroups.length === 0 ? (
@@ -501,20 +452,15 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
             Belum ada target barang pada periode ini. Buka menu Plan untuk menambahkan barang.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {categoryGroups.map((group) => {
-              const isOpen = isCatOpen(group.category);
               return (
                 <div
                   key={group.category}
-                  className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden transition hover:border-slate-700"
+                  className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden transition"
                 >
-                  {/* Category Accordion Header */}
-                  <button
-                    type="button"
-                    onClick={() => toggleCategory(group.category)}
-                    className="w-full p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left hover:bg-slate-900/60 transition cursor-pointer"
-                  >
+                  {/* Category Header */}
+                  <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/70 border-b border-slate-800/80">
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                         group.isFinished 
@@ -563,74 +509,70 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
                           />
                         </div>
                       </div>
-
-                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-rose-400' : ''}`} />
                     </div>
-                  </button>
+                  </div>
 
-                  {/* Accordion Content: Detail per SKU */}
-                  {isOpen && (
-                    <div className="p-3 border-t border-slate-800/80 bg-slate-950/40 space-y-2">
-                      {group.items.map((item) => {
-                        const isItemFinished = item.percent >= 100;
-                        return (
-                          <div
-                            key={item.sku_id}
-                            className="bg-slate-900/80 hover:bg-slate-900 border border-slate-800/90 rounded-xl p-3 space-y-2 transition"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="flex items-center space-x-1.5">
-                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
-                                    {item.sku_code}
-                                  </span>
-                                </div>
-                                <h4 className="text-xs font-bold text-white mt-1 truncate">
-                                  {item.sku_name}
-                                </h4>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <span className={`text-xs font-black ${
-                                  isItemFinished ? 'text-emerald-400' : 'text-slate-200'
-                                }`}>
-                                  {formatPercent(item.percent)}
+                  {/* Direct Items List */}
+                  <div className="p-3 bg-slate-950/40 space-y-2">
+                    {group.items.map((item) => {
+                      const isItemFinished = item.percent >= 100;
+                      return (
+                        <div
+                          key={item.sku_id}
+                          className="bg-slate-900/80 hover:bg-slate-900 border border-slate-800/90 rounded-xl p-3 space-y-2 transition"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
+                                  {item.sku_code}
                                 </span>
-                                {isItemFinished && (
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 inline ml-1" />
-                                )}
                               </div>
+                              <h4 className="text-xs font-bold text-white mt-1 truncate">
+                                {item.sku_name}
+                              </h4>
                             </div>
-
-                            {/* Progress bar */}
-                            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  isItemFinished
-                                    ? 'bg-emerald-400'
-                                    : item.percent >= 70
-                                    ? 'bg-amber-400'
-                                    : 'bg-rose-500'
-                                }`}
-                                style={{ width: `${Math.min(100, Math.max(2, item.percent))}%` }}
-                              />
-                            </div>
-
-                            <div className="flex justify-between items-center text-[10px] text-slate-400">
-                              <span>
-                                Hasil: <strong className="text-slate-200">{formatKg(item.actual_kg)} Kg</strong>
+                            <div className="text-right shrink-0">
+                              <span className={`text-xs font-black ${
+                                isItemFinished ? 'text-emerald-400' : 'text-slate-200'
+                              }`}>
+                                {formatPercent(item.percent)}
                               </span>
-                              <span>
-                                Target: <strong className="text-slate-300">{formatKg(item.target_kg)} Kg</strong>
-                              </span>
-                              <span>
-                                Sisa: <strong className="text-rose-400">{formatKg(item.remaining_kg)} Kg</strong>
-                              </span>
+                              {isItemFinished && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 inline ml-1" />
+                              )}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+
+                          {/* Progress bar */}
+                          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                isItemFinished
+                                  ? 'bg-emerald-400'
+                                  : item.percent >= 70
+                                  ? 'bg-amber-400'
+                                  : 'bg-rose-500'
+                              }`}
+                              style={{ width: `${Math.min(100, Math.max(2, item.percent))}%` }}
+                            />
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px] text-slate-400">
+                            <span>
+                              Hasil: <strong className="text-slate-200">{formatKg(item.actual_kg)} Kg</strong>
+                            </span>
+                            <span>
+                              Target: <strong className="text-slate-300">{formatKg(item.target_kg)} Kg</strong>
+                            </span>
+                            <span>
+                              Sisa: <strong className="text-rose-400">{formatKg(item.remaining_kg)} Kg</strong>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
