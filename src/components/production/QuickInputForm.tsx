@@ -73,24 +73,13 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // Default selected SKU from first target
+  // Default selected SKU: awalnya kosong agar pengguna memilih atau menginput sendiri
   const [selectedSku, setSelectedSku] = useState<{
     id: string;
     code: string;
     name: string;
     targetKg?: number;
-  } | null>(() => {
-    if (plan.targets && plan.targets.length > 0) {
-      const t = plan.targets[0];
-      return {
-        id: t.sku_id,
-        code: t.sku_code,
-        name: t.sku_name,
-        targetKg: t.target_kg,
-      };
-    }
-    return null;
-  });
+  } | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -201,6 +190,8 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
     });
 
     setSuccessMsg(`Hasil produksi ${formatKg(kg)} Kg untuk ${selectedSku.name} berhasil disimpan!`);
+    setSelectedSku(null);
+    setSearchQuery('');
     setActualKg('');
     setNotes('');
 
@@ -476,66 +467,144 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                 <Search className="w-4 h-4 text-slate-500 mr-2 shrink-0" />
                 <input
                   type="text"
-                  placeholder="Ketik kode SKU atau nama barang..."
+                  placeholder="Ketik kode SKU atau nama barang untuk memilih..."
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     setIsDropdownOpen(true);
                   }}
                   onFocus={() => setIsDropdownOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (filteredOptions.length > 0) {
+                        const first = filteredOptions[0];
+                        setSelectedSku({
+                          id: first.id,
+                          code: first.code,
+                          name: first.name,
+                          targetKg: first.targetKg,
+                        });
+                        setIsDropdownOpen(false);
+                        setSearchQuery('');
+                      } else if (searchQuery.trim()) {
+                        setSelectedSku({
+                          id: `sku-custom-${Date.now().toString(36)}`,
+                          code: searchQuery.trim().toUpperCase(),
+                          name: searchQuery.trim(),
+                        });
+                        setIsDropdownOpen(false);
+                        setSearchQuery('');
+                      }
+                    }
+                  }}
                   className="w-full bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 text-slate-500 hover:text-white rounded transition"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               {isDropdownOpen && (
-                <div 
-                  style={{ backgroundColor: '#050505', borderColor: '#1e293b' }}
-                  className="absolute z-30 left-0 right-0 top-full mt-1 border rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-900"
-                >
-                  {filteredOptions.length === 0 ? (
-                    <div className="p-3 text-xs text-slate-500 text-center">
-                      Tidak ada barang yang cocok.
-                    </div>
-                  ) : (
-                    filteredOptions.map((opt) => (
-                      <button
-                        type="button"
-                        key={opt.id}
-                        onClick={() => {
-                          setSelectedSku({
-                            id: opt.id,
-                            code: opt.code,
-                            name: opt.name,
-                            targetKg: opt.targetKg,
-                          });
-                          setIsDropdownOpen(false);
-                          setSearchQuery('');
-                        }}
-                        className="w-full text-left p-2.5 hover:bg-slate-900 transition flex items-center justify-between group cursor-pointer"
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="flex items-center space-x-1.5">
-                            <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                              {opt.code}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                              {opt.category}
-                            </span>
-                            {opt.isInPlan && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
-                                Target Plan W{plan.week_number}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs font-semibold text-slate-200 group-hover:text-white mt-1 truncate">
-                            {opt.name}
-                          </p>
-                        </div>
-                        <Plus className="w-4 h-4 text-slate-600 group-hover:text-rose-400 shrink-0" />
-                      </button>
-                    ))
-                  )}
-                </div>
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsDropdownOpen(false)}
+                  />
+                  <div 
+                    style={{ backgroundColor: '#050505', borderColor: '#1e293b' }}
+                    className="absolute z-30 left-0 right-0 top-full mt-1 border rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-900"
+                  >
+                    {filteredOptions.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-400 text-center space-y-2">
+                        <p>Tidak ada barang yang cocok dalam master.</p>
+                        {searchQuery.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedSku({
+                                id: `sku-custom-${Date.now().toString(36)}`,
+                                code: searchQuery.trim().toUpperCase(),
+                                name: searchQuery.trim(),
+                              });
+                              setIsDropdownOpen(false);
+                              setSearchQuery('');
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-md"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Gunakan "{searchQuery.trim()}" (Input Manual)</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        {filteredOptions.map((opt) => (
+                          <button
+                            type="button"
+                            key={opt.id}
+                            onClick={() => {
+                              setSelectedSku({
+                                id: opt.id,
+                                code: opt.code,
+                                name: opt.name,
+                                targetKg: opt.targetKg,
+                              });
+                              setIsDropdownOpen(false);
+                              setSearchQuery('');
+                            }}
+                            className="w-full text-left p-2.5 hover:bg-slate-900 transition flex items-center justify-between group cursor-pointer"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                                  {opt.code}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                                  {opt.category}
+                                </span>
+                                {opt.isInPlan && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
+                                    Target Plan W{plan.week_number}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs font-semibold text-slate-200 group-hover:text-white mt-1 truncate">
+                                {opt.name}
+                              </p>
+                            </div>
+                            <Plus className="w-4 h-4 text-slate-600 group-hover:text-rose-400 shrink-0" />
+                          </button>
+                        ))}
+
+                        {searchQuery.trim() && !filteredOptions.some(o => o.name.toLowerCase() === searchQuery.trim().toLowerCase() || o.code.toLowerCase() === searchQuery.trim().toLowerCase()) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedSku({
+                                id: `sku-custom-${Date.now().toString(36)}`,
+                                code: searchQuery.trim().toUpperCase(),
+                                name: searchQuery.trim(),
+                              });
+                              setIsDropdownOpen(false);
+                              setSearchQuery('');
+                            }}
+                            className="w-full text-left p-2.5 hover:bg-slate-900 bg-slate-950/60 border-t border-slate-800 transition flex items-center justify-between text-xs text-rose-400 font-semibold cursor-pointer"
+                          >
+                            <span>Gunakan input manual: "<strong>{searchQuery.trim()}</strong>"</span>
+                            <Plus className="w-4 h-4 text-rose-400 shrink-0" />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}
