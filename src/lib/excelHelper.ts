@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { ProductSKU } from '@/types';
+import { ProductSKU, WeeklyProductionPlan, getMonthName } from '@/types';
 
 export interface ExcelImportRow {
   sku: string;
@@ -153,3 +153,42 @@ export function downloadExcelTemplate(type: 'plan' | 'production', sampleSkus?: 
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
   XLSX.writeFile(workbook, filename);
 }
+
+/**
+ * Unduh / Export Target Plan Mingguan ke format Excel (.xlsx)
+ */
+export function exportPlanToExcel(plan: WeeklyProductionPlan) {
+  const monthName = getMonthName(plan.month);
+  const cleanMonthName = monthName.replace(/[^a-zA-Z0-9]/g, '');
+  const filename = `Plan_Produksi_W${plan.week_number}_${cleanMonthName}_${plan.year || 2026}.xlsx`;
+
+  const headers = ['No', 'Kode SKU', 'Nama Barang', 'Kategori', 'Target (KG)'];
+
+  const rows: (string | number)[][] = (plan.targets || []).map((t, idx) => [
+    idx + 1,
+    t.sku_code,
+    t.sku_name,
+    t.category || '-',
+    t.target_kg,
+  ]);
+
+  const totalKg = (plan.targets || []).reduce((acc, t) => acc + (t.target_kg || 0), 0);
+  rows.push(['', '', 'TOTAL TARGET', '', totalKg]);
+
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  // Set lebar kolom agar rapi
+  worksheet['!cols'] = [
+    { wch: 6 },  // No
+    { wch: 18 }, // Kode SKU
+    { wch: 40 }, // Nama Barang
+    { wch: 20 }, // Kategori
+    { wch: 16 }, // Target (KG)
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  const sheetTitle = `W${plan.week_number} ${cleanMonthName}`.substring(0, 31);
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetTitle);
+  XLSX.writeFile(workbook, filename);
+}
+

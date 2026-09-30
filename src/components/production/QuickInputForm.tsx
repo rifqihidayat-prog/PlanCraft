@@ -6,7 +6,6 @@ import {
   DailyProductionLog, 
   ProductSKU,
   AuthUser,
-  MONTH_NAMES,
   getMonthName
 } from '@/types';
 import { formatKg, formatPercent } from '@/lib/storage';
@@ -20,7 +19,6 @@ import {
   Search,
   Plus,
   X,
-  Calendar,
   Lock,
   FileSpreadsheet,
   Download,
@@ -28,7 +26,8 @@ import {
   ChevronDown,
   Check,
   Layers,
-  Target
+  Target,
+  Calendar
 } from 'lucide-react';
 import { parseExcelFile, downloadExcelTemplate, ExcelImportRow } from '@/lib/excelHelper';
 
@@ -103,42 +102,6 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
 
   // Widget Target Kebutuhan drawer state
   const [isTargetDrawerOpen, setIsTargetDrawerOpen] = useState(false);
-
-  // Periode Filter State (Bulan Kebutuhan & Week 1-5)
-  const [selectedMonth, setSelectedMonth] = useState<number>(() => {
-    return plan.month || Number(plan.start_date?.split('-')[1]) || 10;
-  });
-  const [selectedWeek, setSelectedWeek] = useState<number>(() => {
-    const w = Number(plan.week_number);
-    return w > 5 ? 1 : (w || 1);
-  });
-
-  // Sinkronisasi bila plan berganti dari luar
-  React.useEffect(() => {
-    const m = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
-    const w = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
-    setSelectedMonth(m);
-    setSelectedWeek(w);
-  }, [plan.id, plan.month, plan.week_number, plan.start_date]);
-
-  const handlePeriodChange = (newMonth: number, newWeek: number) => {
-    setSelectedMonth(newMonth);
-    setSelectedWeek(newWeek);
-    if (plans && onSelectPlan) {
-      const matched = plans.find(
-        p => (p.month || Number(p.start_date.split('-')[1])) === newMonth && p.week_number === newWeek
-      );
-      if (matched) {
-        onSelectPlan(matched);
-      }
-    }
-  };
-
-  const isMatchedPlan = useMemo(() => {
-    const pMonth = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
-    const pWeek = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
-    return pMonth === selectedMonth && pWeek === selectedWeek;
-  }, [plan, selectedMonth, selectedWeek]);
 
   // Modal Import Excel state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -344,84 +307,6 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
         </div>
       )}
 
-      {/* Period Filter: Bulan Kebutuhan & Week 1 - 5 */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-slate-200">
-            <Calendar className="w-4 h-4 text-rose-500" />
-            <span>Pilih Periode Kebutuhan Produksi:</span>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-slate-400 font-medium">Bulan Kebutuhan:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => handlePeriodChange(Number(e.target.value), selectedWeek)}
-              className="bg-black border border-slate-800 focus:border-slate-700 text-white rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none cursor-pointer"
-            >
-              {MONTH_NAMES.map((mName, idx) => (
-                <option key={mName} value={idx + 1}>
-                  {mName}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Week 1 - 5 Selector Chips */}
-        <div className="grid grid-cols-5 gap-1.5 pt-1">
-          {[1, 2, 3, 4, 5].map((w) => {
-            const isSelected = selectedWeek === w;
-            const planForWeek = (plans || []).find(
-              p => (p.month || Number(p.start_date.split('-')[1])) === selectedMonth && p.week_number === w
-            );
-            const hasPlan = Boolean(planForWeek);
-
-            return (
-              <button
-                key={w}
-                type="button"
-                onClick={() => handlePeriodChange(selectedMonth, w)}
-                className={`py-2 px-1.5 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center border cursor-pointer ${
-                  isSelected
-                    ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-950/40'
-                    : hasPlan
-                    ? 'bg-slate-950 hover:bg-slate-800 text-slate-200 border-slate-800'
-                    : 'bg-slate-950/50 hover:bg-slate-900 text-slate-500 border-slate-900'
-                }`}
-              >
-                <span>Week {w}</span>
-                <span className="text-[9px] font-normal opacity-80 mt-0.5 truncate">
-                  {hasPlan ? `${planForWeek!.targets?.length || 0} Target` : 'Belum Ada'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Period Status Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-800/80 gap-1.5">
-          <div className="flex items-center space-x-2">
-            <span className="text-slate-400">Target Plan Terpilih:</span>
-            <span className="font-bold text-white">
-              {getMonthName(selectedMonth)} • Week {selectedWeek}
-            </span>
-            {isMatchedPlan ? (
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                {plan.status === 'active' ? 'Aktif' : 'Tersedia'}
-              </span>
-            ) : (
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 font-bold">
-                Plan Belum Dibuat
-              </span>
-            )}
-          </div>
-          <span className="text-[10px] text-slate-400">
-            {isMatchedPlan ? `${plan.start_date} s/d ${plan.end_date}` : 'Buka menu Plan untuk membuat rencana minggu ini'}
-          </span>
-        </div>
-      </div>
-
       {/* Target Kebutuhan Pekan Ini (Collapsible Widget) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <button
@@ -435,7 +320,7 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
             </div>
             <div>
               <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                <span>Target Kebutuhan ({getMonthName(selectedMonth)} W{selectedWeek})</span>
+                <span>Target Kebutuhan Pekan Ini (W{plan.week_number})</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-400 font-mono font-bold">
                   {(plan.targets || []).length} Item
                 </span>

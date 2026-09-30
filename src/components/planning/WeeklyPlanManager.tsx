@@ -27,7 +27,7 @@ import {
   ShieldAlert,
   Check
 } from 'lucide-react';
-import { parseExcelFile, downloadExcelTemplate, ExcelImportRow } from '@/lib/excelHelper';
+import { parseExcelFile, downloadExcelTemplate, exportPlanToExcel, ExcelImportRow } from '@/lib/excelHelper';
 
 interface WeeklyPlanManagerProps {
   plan: WeeklyProductionPlan;
@@ -204,6 +204,28 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     setTargets([...source.targets]);
     setIsCopyModalOpen(false);
     showNotification(`Berhasil menyalin ${source.targets.length} target barang dari ${source.title}!`);
+  };
+
+  // Export Target Plan ke Excel
+  const handleExportExcel = () => {
+    if (!targets || targets.length === 0) {
+      alert('Tidak ada target barang pada rencana minggu ini untuk diexport.');
+      return;
+    }
+    const currentPlan: WeeklyProductionPlan = {
+      id: currentPlanId,
+      title,
+      week_number: Number(weekNumber),
+      month: Number(month),
+      year: Number(year),
+      start_date: startDate,
+      end_date: endDate,
+      notes,
+      targets,
+      status: 'active',
+    };
+    exportPlanToExcel(currentPlan);
+    showNotification('File Excel target plan berhasil diunduh!');
   };
 
   // Total target
@@ -421,12 +443,32 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
         </div>
 
         {isReadOnly ? (
-          <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
-            <ShieldAlert className="w-4 h-4" />
-            <span>Mode Tinjau (Tim Produksi)</span>
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Unduh target kebutuhan minggu ini ke Excel"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export Excel</span>
+            </button>
+            <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5">
+              <ShieldAlert className="w-4 h-4" />
+              <span>Mode Tinjau (Tim Produksi)</span>
+            </div>
           </div>
         ) : (
           <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              title="Unduh target rencana minggu ini ke Excel"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export Excel</span>
+            </button>
             <button
               type="button"
               onClick={() => setIsImportModalOpen(true)}
@@ -739,10 +781,23 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
         {/* Targets Table / List */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <span>Daftar Target Item</span>
-              <span className="text-rose-400 font-mono">({targets.length} Item)</span>
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>Daftar Target Item</span>
+                <span className="text-rose-400 font-mono">({targets.length} Item)</span>
+              </h2>
+              {targets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                  title="Export target pekan ini ke file Excel"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>Export</span>
+                </button>
+              )}
+            </div>
             <div className="text-xs text-slate-400">
               Total Target: <strong className="text-white text-sm">{totalTargetKg.toLocaleString('id-ID')} Kg</strong>
             </div>
