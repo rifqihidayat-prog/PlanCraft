@@ -24,6 +24,7 @@ interface NavbarProps {
   setIsMobileFrame: (val: boolean) => void;
   onRefresh: () => void;
   onLogout: () => void;
+  isSyncing?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setIsMobileFrame,
   onRefresh,
   onLogout,
+  isSyncing = false,
 }) => {
   const pinDialogRef = useRef<HTMLDialogElement>(null);
   const [isPinDialogOpen, setIsPinDialogOpen] = useState(false);
@@ -150,10 +152,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Refresh button */}
           <button
             onClick={onRefresh}
-            title="Refresh Data"
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition active:scale-95"
+            title={isSyncing ? "Menyinkronkan data dengan server..." : "Refresh Data (Sinkron Server)"}
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition active:scale-95 cursor-pointer"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-rose-400' : ''}`} />
           </button>
 
           {/* Device Frame View Toggle for desktop review */}

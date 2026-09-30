@@ -48,6 +48,7 @@ export default function HomePage() {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [isMobileFrame, setIsMobileFrame] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Core States
   const [skus, setSkus] = useState<ProductSKU[]>(DEFAULT_SKUS);
@@ -56,7 +57,23 @@ export default function HomePage() {
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>('all');
   const [logs, setLogs] = useState<DailyProductionLog[]>(INITIAL_LOGS);
 
-  // Inisialisasi: Periksa sesi server, migrasi data browser, dan ambil data SQLite
+  // Fungsi refresh terpusat dari SQLite server
+  const handleRefresh = async () => {
+    setIsSyncing(true);
+    try {
+      const serverData = await fetchInitialData();
+      if (serverData) {
+        setSkus(serverData.skus);
+        setPlans(serverData.plans);
+        setActivePlan(serverData.activePlan);
+        setLogs(serverData.logs);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Inisialisasi: Periksa sesi server dan ambil data SQLite terpusat
   useEffect(() => {
     async function initAuthAndData() {
       // 1. Cek sesi HTTP-only cookie di server
@@ -65,24 +82,7 @@ export default function HomePage() {
       if (sessionUser) {
         setCurrentUser(sessionUser);
 
-        // 2. Jalankan migrasi satu kali jika browser memiliki data lama di localStorage
-        if (typeof window !== 'undefined' && localStorage.getItem('plancraft_migrated_v1') !== 'true') {
-          const oldLogs = getStoredLogs();
-          const oldPlans = sessionUser.role === 'admin' ? getStoredPlans() : [];
-          const oldSkus = sessionUser.role === 'admin' ? getStoredSKUs() : [];
-
-          const res = await migrateBrowserDataOnServer({
-            logs: oldLogs,
-            plans: oldPlans,
-            skus: oldSkus,
-          });
-          // HANYA tandai selesai jika request migrasi berhasil diterima dan diproses server
-          if (res && res.success) {
-            localStorage.setItem('plancraft_migrated_v1', 'true');
-          }
-        }
-
-        // 3. Ambil data terpusat dari SQLite server
+        // 2. Ambil data terpusat langsung dari SQLite server (sumber kebenaran tunggal)
         const serverData = await fetchInitialData();
         if (serverData) {
           setSkus(serverData.skus);
@@ -99,6 +99,62 @@ export default function HomePage() {
 
     initAuthAndData();
   }, []);
+
+  // Sinkronisasi otomatis antar-device (Real-time polling & window focus)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let isMounted = true;
+    const pollData = async () => {
+      // Hanya poll saat dokumen terlihat (tidak hidden) agar hemat baterai/kuota
+      if (typeof document !== 'undefined' && document.hidden) return;
+      try {
+        const serverData = await fetchInitialData();
+        if (serverData && isMounted) {
+          setSkus(serverData.skus);
+          setPlans(serverData.plans);
+          setActivePlan(serverData.activePlan);
+          setLogs(serverData.logs);
+        }
+      } catch {
+        // Abaikan error pada background sync
+      }
+    };
+
+    // Polling setiap 3.5 detik untuk sinkronisasi instan antar device
+    const intervalId = setInterval(pollData, 3500);
+
+    // Ambil data terbaru langsung saat device kembali dibuka atau tab aktif
+    const handleSyncOnVisible = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        pollData();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleSyncOnVisible);
+    window.addEventListener('focus', handleSyncOnVisible);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      window.removeEventListener('visibilitychange', handleSyncOnVisible);
+      window.removeEventListener('focus', handleSyncOnVisible);
+    };
+  }, [currentUser]);
+
+  // Sinkronkan data instan saat pengguna berpindah menu tab di aplikasi
+  useEffect(() => {
+    if (currentUser) {
+      fetchInitialData().then((serverData) => {
+        if (serverData) {
+          setSkus(serverData.skus);
+          setPlans(serverData.plans);
+          setActivePlan(serverData.activePlan);
+          setLogs(serverData.logs);
+        }
+      });
+    }
+  }, [currentTab, currentUser]);
 
   // Proteksi Akses: Tim Produksi tidak boleh mengakses master database SKU (hanya admin)
   useEffect(() => {
@@ -117,17 +173,20 @@ export default function HomePage() {
   const handleSaveLog = async (newLogData: Omit<DailyProductionLog, 'id' | 'created_at'>) => {
     const created = await createProductionLog(newLogData);
     if (created) {
-      setLogs(prev => [created, ...prev]);
+      setLogs(prev => [created, ...prev.filter(l => l.id !== created.id)]);
     } else {
       const fallback = addDailyLog(newLogData);
       setLogs(prev => [fallback, ...prev]);
     }
+    // Segera refresh data dari server agar semua device sinkron
+    await handleRefresh();
   };
 
   const handleDeleteLog = async (id: string) => {
     setLogs(prev => prev.filter(l => l.id !== id));
     await removeProductionLog(id);
     deleteDailyLog(id);
+    await handleRefresh();
   };
 
   const handleSavePlan = async (updatedPlan: WeeklyProductionPlan) => {
@@ -140,6 +199,9 @@ export default function HomePage() {
 
     if (currentUser?.role === 'admin') {
       await saveProductionPlan(updatedPlan);
+      if (updatedPlan.status === 'active') {
+        await setActivePlanOnServer(updatedPlan.id);
+      }
     }
     const currentPlans = getStoredPlans();
     const idx = currentPlans.findIndex(p => p.id === updatedPlan.id);
@@ -147,6 +209,9 @@ export default function HomePage() {
       ? currentPlans.map(p => p.id === updatedPlan.id ? updatedPlan : p)
       : [...currentPlans, updatedPlan];
     saveStoredPlans(newPlans);
+
+    // Segera refresh data server
+    await handleRefresh();
   };
 
   const handleSelectPlan = async (plan: WeeklyProductionPlan) => {
@@ -155,6 +220,7 @@ export default function HomePage() {
     if (currentUser?.role === 'admin') {
       await setActivePlanOnServer(plan.id);
     }
+    await handleRefresh();
   };
 
   const handleUpdateSKUs = async (newSkus: ProductSKU[]) => {
@@ -163,16 +229,7 @@ export default function HomePage() {
     if (currentUser?.role === 'admin') {
       await saveSKUsToServer(newSkus);
     }
-  };
-
-  const handleRefresh = async () => {
-    const serverData = await fetchInitialData();
-    if (serverData) {
-      setSkus(serverData.skus);
-      setPlans(serverData.plans);
-      setActivePlan(serverData.activePlan);
-      setLogs(serverData.logs);
-    }
+    await handleRefresh();
   };
 
   // Calculate summary based on month and week filter
@@ -213,24 +270,7 @@ export default function HomePage() {
         onLogin={async (user) => {
           setCurrentUser(user);
 
-          // Cek & jalankan migrasi jika belum pernah
-          if (typeof window !== 'undefined' && localStorage.getItem('plancraft_migrated_v1') !== 'true') {
-            const oldLogs = getStoredLogs();
-            const oldPlans = user.role === 'admin' ? getStoredPlans() : [];
-            const oldSkus = user.role === 'admin' ? getStoredSKUs() : [];
-
-            const res = await migrateBrowserDataOnServer({
-              logs: oldLogs,
-              plans: oldPlans,
-              skus: oldSkus,
-            });
-            // HANYA tandai selesai jika request migrasi berhasil diterima dan diproses server
-            if (res && res.success) {
-              localStorage.setItem('plancraft_migrated_v1', 'true');
-            }
-          }
-
-          // Tarik data SQLite terpusat
+          // Tarik data SQLite terpusat langsung dari server
           const serverData = await fetchInitialData();
           if (serverData) {
             setSkus(serverData.skus);
@@ -326,6 +366,7 @@ export default function HomePage() {
           setIsMobileFrame={setIsMobileFrame}
           onRefresh={handleRefresh}
           onLogout={handleLogout}
+          isSyncing={isSyncing}
         />
 
         {/* Main Content Area */}

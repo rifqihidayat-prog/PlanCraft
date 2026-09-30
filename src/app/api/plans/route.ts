@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
     }
 
     savePlan(plan);
-    return NextResponse.json({ success: true, data: plan });
+    const activePlan = getActivePlan();
+    return NextResponse.json({ success: true, data: plan, activePlan });
   } catch (error) {
     console.error('Error saving plan:', error);
     return NextResponse.json({ success: false, message: 'Gagal menyimpan rencana produksi ke server' }, { status: 500 });

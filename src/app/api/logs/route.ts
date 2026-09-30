@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
       sku_code: body.sku_code || '',
       sku_name: body.sku_name || '',
       actual_kg: body.actual_kg,
+      bottleneck_reason: body.bottleneck_reason || 'Normal / Lancar',
       notes: body.notes || '',
     });
 

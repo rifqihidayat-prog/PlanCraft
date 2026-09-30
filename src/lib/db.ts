@@ -102,6 +102,7 @@ function initSchemaAndSeed(db: Database.Database) {
       sku_code TEXT NOT NULL,
       sku_name TEXT NOT NULL,
       actual_kg REAL NOT NULL,
+      bottleneck_reason TEXT,
       notes TEXT,
       created_at TEXT NOT NULL
     );
@@ -116,6 +117,12 @@ function initSchemaAndSeed(db: Database.Database) {
   const planCols = db.prepare('PRAGMA table_info(production_plans)').all() as Array<{ name: string }>;
   if (!planCols.some(col => col.name === 'month')) {
     db.exec('ALTER TABLE production_plans ADD COLUMN month INTEGER');
+  }
+
+  // Migrasi Skema: Pastikan kolom 'bottleneck_reason' ada di production_logs
+  const logCols = db.prepare('PRAGMA table_info(production_logs)').all() as Array<{ name: string }>;
+  if (!logCols.some(col => col.name === 'bottleneck_reason')) {
+    db.exec('ALTER TABLE production_logs ADD COLUMN bottleneck_reason TEXT');
   }
 
   // Update data lama jika month belum terisi atau week_number masih ISO week > 5
@@ -371,6 +378,8 @@ export function setActivePlanIdInDb(planId: string): void {
     INSERT INTO app_settings (key, value) VALUES ('active_plan_id', ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run(planId);
+  db.prepare("UPDATE production_plans SET status = 'completed' WHERE status = 'active' AND id != ?").run(planId);
+  db.prepare("UPDATE production_plans SET status = 'active' WHERE id = ?").run(planId);
 }
 
 export function getActivePlan(): WeeklyProductionPlan {
@@ -406,6 +415,13 @@ export function savePlan(plan: WeeklyProductionPlan): void {
 
   const tx = db.transaction((p: WeeklyProductionPlan) => {
     const planMonth = p.month || Number(p.start_date.split('-')[1]) || 1;
+    if (p.status === 'active') {
+      db.prepare("UPDATE production_plans SET status = 'completed' WHERE status = 'active' AND id != ?").run(p.id);
+      db.prepare(`
+        INSERT INTO app_settings (key, value) VALUES ('active_plan_id', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(p.id);
+    }
     upsertPlan.run(p.id, p.title, p.week_number, planMonth, p.year, p.start_date, p.end_date, p.status, p.notes || null);
     deleteTargets.run(p.id);
     for (const t of p.targets) {
@@ -427,6 +443,7 @@ export function getAllLogs(): DailyProductionLog[] {
     sku_code: string;
     sku_name: string;
     actual_kg: number;
+    bottleneck_reason: string | null;
     notes: string | null;
     created_at: string;
   }>;
@@ -439,6 +456,7 @@ export function getAllLogs(): DailyProductionLog[] {
     sku_code: r.sku_code,
     sku_name: r.sku_name,
     actual_kg: r.actual_kg,
+    bottleneck_reason: r.bottleneck_reason || undefined,
     notes: r.notes || undefined,
     created_at: r.created_at,
   }));
@@ -456,8 +474,8 @@ export function addProductionLog(log: Omit<DailyProductionLog, 'id' | 'created_a
   };
 
   const stmt = db.prepare(`
-    INSERT INTO production_logs (id, plan_id, date, sku_id, sku_code, sku_name, actual_kg, notes, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO production_logs (id, plan_id, date, sku_id, sku_code, sku_name, actual_kg, bottleneck_reason, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -468,6 +486,7 @@ export function addProductionLog(log: Omit<DailyProductionLog, 'id' | 'created_a
     fullLog.sku_code,
     fullLog.sku_name,
     fullLog.actual_kg,
+    fullLog.bottleneck_reason || 'Normal / Lancar',
     fullLog.notes || null,
     fullLog.created_at
   );
