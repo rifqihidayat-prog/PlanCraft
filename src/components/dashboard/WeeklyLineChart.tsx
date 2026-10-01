@@ -8,11 +8,15 @@ import { TrendingUp, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 interface WeeklyLineChartProps {
   plans: WeeklyProductionPlan[];
   logs: DailyProductionLog[];
+  titleSuffix?: string;
+  selectedPlanId?: string;
 }
 
 export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
   plans,
   logs,
+  titleSuffix,
+  selectedPlanId,
 }) => {
   const [activeTooltipIndex, setActiveTooltipIndex] = useState<number | null>(null);
 
@@ -99,7 +103,7 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
         <div>
           <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 text-emerald-400" />
-            Grafik Tren Produksi Mingguan (Target vs Hasil Jadi)
+            Grafik Tren Produksi {titleSuffix ? `(${titleSuffix})` : 'Mingguan'}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             Garis target membandingkan realisasi hasil jadi untuk melihat ketercapaian per pekan.
@@ -189,6 +193,7 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
             const yT = getY(d.targetKg);
             const yA = getY(d.actualKg);
             const isHovered = activeTooltipIndex === i;
+            const isSelected = selectedPlanId === d.id;
 
             return (
               <g key={d.id} className="cursor-pointer" onClick={() => setActiveTooltipIndex(i)}>
@@ -208,10 +213,10 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
                 <circle
                   cx={x}
                   cy={yA}
-                  r={isHovered ? 7 : 5.5}
+                  r={isSelected ? 8 : isHovered ? 7 : 5.5}
                   fill={d.isAchieved ? '#10b981' : d.percent >= 80 ? '#f59e0b' : '#f43f5e'}
-                  stroke="#0f172a"
-                  strokeWidth="2"
+                  stroke={isSelected ? '#f43f5e' : '#0f172a'}
+                  strokeWidth={isSelected ? 3 : 2}
                   className="transition-all duration-200"
                 />
 
@@ -283,43 +288,50 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
 
       {/* Week Achievement Cards Grid */}
       <div className="grid grid-cols-2 @min-[640px]:grid-cols-4 gap-2 pt-1">
-        {weekData.map((d) => (
-          <div
-            key={d.id}
-            className={`p-2.5 rounded-xl border transition ${
-              d.isAchieved
-                ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-300'
-                : d.actualKg > 0
-                ? 'bg-slate-950 border-slate-800 text-slate-300'
-                : 'bg-slate-950/40 border-slate-900 text-slate-500'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-white">{d.label}</span>
-              {d.isAchieved ? (
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              ) : d.status === 'active' ? (
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-              ) : (
-                <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
-              )}
-            </div>
+        {weekData.map((d) => {
+          const isSelected = selectedPlanId === d.id;
+          return (
+            <div
+              key={d.id}
+              className={`p-2.5 rounded-xl border transition ${
+                isSelected
+                  ? 'bg-rose-950/30 border-rose-500 ring-2 ring-rose-500/40 text-white'
+                  : d.isAchieved
+                  ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-300'
+                  : d.actualKg > 0
+                  ? 'bg-slate-950 border-slate-800 text-slate-300'
+                  : 'bg-slate-950/40 border-slate-900 text-slate-500'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-bold ${isSelected ? 'text-rose-400' : 'text-white'}`}>
+                  {d.label} {isSelected && '• Terpilih'}
+                </span>
+                {d.isAchieved ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                ) : d.status === 'active' ? (
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
+                )}
+              </div>
 
-            <div className="mt-1">
-              <div className="text-[10px] text-slate-400">
-                {formatKg(d.actualKg)} / {formatKg(d.targetKg)} Kg
-              </div>
-              <div className="text-xs font-extrabold mt-0.5 flex items-center justify-between">
-                <span className={d.isAchieved ? 'text-emerald-400' : d.percent >= 80 ? 'text-amber-400' : 'text-rose-400'}>
-                  {formatPercent(d.percent)}
-                </span>
-                <span className="text-[9px] uppercase font-semibold text-slate-400">
-                  {d.isAchieved ? 'Achieved' : d.status === 'active' ? 'Running' : 'Target'}
-                </span>
+              <div className="mt-1">
+                <div className="text-[10px] text-slate-400">
+                  {formatKg(d.actualKg)} / {formatKg(d.targetKg)} Kg
+                </div>
+                <div className="text-xs font-extrabold mt-0.5 flex items-center justify-between">
+                  <span className={d.isAchieved ? 'text-emerald-400' : d.percent >= 80 ? 'text-amber-400' : 'text-rose-400'}>
+                    {formatPercent(d.percent)}
+                  </span>
+                  <span className="text-[9px] uppercase font-semibold text-slate-400">
+                    {d.isAchieved ? 'Achieved' : d.status === 'active' ? 'Running' : 'Target'}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

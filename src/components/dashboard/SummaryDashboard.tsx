@@ -119,10 +119,28 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
     periodTitle = `Pencapaian Minggu Ke-${currentPlan.week_number} (${getMonthShortName(m)} ${currentPlan.year})`;
   }
 
-  // Today's stats
+  // Scoped plans for logs and today's stats
+  const scopedPlanIds = React.useMemo(() => {
+    if (currentMonthKey === 'all' && selectedWeekFilter === 'all') {
+      return new Set(plans.map(p => p.id));
+    }
+    if (selectedWeekFilter.startsWith('month-') || currentMonthKey !== 'all') {
+      if (!isAllWeeks && !selectedWeekFilter.startsWith('month-')) {
+        return new Set([selectedWeekFilter]);
+      }
+      return new Set(filteredMonthPlans.map(p => p.id));
+    }
+    return new Set(plans.map(p => p.id));
+  }, [currentMonthKey, selectedWeekFilter, plans, filteredMonthPlans, isAllWeeks]);
+
+  // Today's stats: scoped to the selected month/plan
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayLogs = logs.filter(l => l.date === todayStr);
-  const todayActualKg = todayLogs.reduce((acc, curr) => acc + curr.actual_kg, 0);
+  const todayLogs = React.useMemo(() => {
+    return logs.filter(l => l.date === todayStr && scopedPlanIds.has(l.plan_id));
+  }, [logs, todayStr, scopedPlanIds]);
+  const todayActualKg = React.useMemo(() => {
+    return todayLogs.reduce((acc, curr) => acc + curr.actual_kg, 0);
+  }, [todayLogs]);
 
   // Status badge config
   const getStatusBadge = () => {
@@ -388,7 +406,12 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
       </div>
 
       {/* Line Chart Tren Produksi Mingguan (Target vs Realisasi Garis) */}
-      <WeeklyLineChart plans={plans} logs={logs} />
+      <WeeklyLineChart 
+        plans={currentMonthKey === 'all' ? plans : filteredMonthPlans} 
+        logs={logs} 
+        titleSuffix={currentMonthKey === 'all' ? 'Semua Bulan' : (selectedMonthInfo?.label || 'Bulan Terpilih')}
+        selectedPlanId={selectedWeekFilter.startsWith('month-') || selectedWeekFilter === 'all' ? undefined : selectedWeekFilter}
+      />
 
       {/* Detail Pencapaian per Barang (SKU) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">

@@ -17,7 +17,6 @@ import {
   CalendarDays, 
   Search, 
   Calendar,
-  Layers,
   FileSpreadsheet,
   Download,
   Upload,
@@ -67,6 +66,33 @@ function getEstimatedWeekDates(year: number, month: number, weekNum: number): { 
   return { start, end };
 }
 
+function computePlanSnapshot(
+  planId: string,
+  title: string,
+  start: string,
+  end: string,
+  notes: string,
+  m: number,
+  w: number,
+  y: number,
+  targets: WeeklyTargetItem[]
+): string {
+  return JSON.stringify({
+    planId,
+    title: (title || '').trim(),
+    start: start || '',
+    end: end || '',
+    notes: (notes || '').trim(),
+    m,
+    w,
+    y,
+    targets: (targets || []).map(t => ({
+      sku_id: t.sku_id,
+      target_kg: Math.round((Number(t.target_kg) || 0) * 100) / 100,
+    })).sort((a, b) => a.sku_id.localeCompare(b.sku_id)),
+  });
+}
+
 export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   plan,
   plans = [],
@@ -91,6 +117,21 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   const [endDate, setEndDate] = useState(plan.end_date);
   const [notes, setNotes] = useState(plan.notes || '');
   const [targets, setTargets] = useState<WeeklyTargetItem[]>(plan.targets || []);
+
+  // Snapshot for dirty state tracking
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(() => {
+    return computePlanSnapshot(
+      plan.id,
+      plan.title,
+      plan.start_date,
+      plan.end_date,
+      plan.notes || '',
+      plan.month || Number(plan.start_date?.split('-')[1]) || 10,
+      Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1),
+      plan.year || 2026,
+      plan.targets || []
+    );
+  });
 
   // Search & add new item state
   const [searchQuery, setSearchQuery] = useState('');
@@ -126,6 +167,19 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     setEndDate(plan.end_date);
     setNotes(plan.notes || '');
     setTargets(plan.targets || []);
+    setLastSavedSnapshot(
+      computePlanSnapshot(
+        plan.id,
+        plan.title,
+        plan.start_date,
+        plan.end_date,
+        plan.notes || '',
+        pMonth,
+        pWeek,
+        plan.year || 2026,
+        plan.targets || []
+      )
+    );
   }, [plan.id]);
 
   const showNotification = (msg: string) => {
@@ -162,6 +216,19 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       setEndDate(existing.end_date || est.end);
       setTargets(existing.targets || []);
       setNotes(existing.notes || '');
+      setLastSavedSnapshot(
+        computePlanSnapshot(
+          existing.id,
+          existing.title || defaultTitle,
+          existing.start_date || est.start,
+          existing.end_date || est.end,
+          existing.notes || '',
+          newMonth,
+          newWeek,
+          newYear,
+          existing.targets || []
+        )
+      );
       if (onSelectPlan) onSelectPlan(existing);
     } else {
       // Periode baru: ID baru dan target bersih (kosong) agar produk dari minggu sebelumnya tidak menempel
@@ -169,32 +236,38 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       setCurrentPlanId(newId);
       setTargets([]);
       setNotes('');
+      setLastSavedSnapshot(
+        computePlanSnapshot(
+          newId,
+          defaultTitle,
+          est.start,
+          est.end,
+          '',
+          newMonth,
+          newWeek,
+          newYear,
+          []
+        )
+      );
     }
   };
 
-  // Buat plan baru untuk periode yang dipilih
-  const handleCreateNewPlan = () => {
-    const newId = `plan-m${month}-w${weekNumber}-${year}-${Date.now().toString(36).substr(2, 4)}`;
-    const est = getEstimatedWeekDates(year, month, weekNumber);
-    const newPlan: WeeklyProductionPlan = {
-      id: newId,
-      title: `Plan Produksi Minggu Ke-${weekNumber} (${getMonthName(month)} ${year})`,
-      week_number: weekNumber,
-      month: month,
-      year: year,
-      start_date: est.start,
-      end_date: est.end,
-      status: 'active',
-      notes: '',
-      targets: [],
-    };
-    setCurrentPlanId(newId);
-    setTargets([]);
-    setNotes('');
-    onSavePlan(newPlan);
-    if (onSelectPlan) onSelectPlan(newPlan);
-    showNotification(`Plan baru untuk ${getMonthName(month)} ${year} (Minggu ${weekNumber}) berhasil dibuat!`);
-  };
+  // Compute current plan snapshot and dirty state
+  const currentSnapshot = useMemo(() => {
+    return computePlanSnapshot(
+      currentPlanId,
+      title,
+      startDate,
+      endDate,
+      notes,
+      month,
+      weekNumber,
+      year,
+      targets
+    );
+  }, [currentPlanId, title, startDate, endDate, notes, month, weekNumber, year, targets]);
+
+  const isDirty = currentSnapshot !== lastSavedSnapshot;
 
   // Salin target dari plan lain
   const handleCopyTargetsFrom = (sourcePlanId: string) => {
@@ -262,21 +335,6 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     if (isReadOnly) return;
     const updatedTargets = targets.filter(t => t.sku_id !== skuId);
     setTargets(updatedTargets);
-
-    const updatedPlan: WeeklyProductionPlan = {
-      ...plan,
-      id: currentPlanId,
-      title,
-      week_number: Number(weekNumber),
-      month: Number(month),
-      year: Number(year),
-      start_date: startDate,
-      end_date: endDate,
-      notes,
-      targets: updatedTargets,
-    };
-
-    onSavePlan(updatedPlan);
     showNotification('Item berhasil dihapus dari target mingguan!');
   };
 
@@ -302,28 +360,13 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     setSelectedSkuToAdd(null);
     setSearchQuery('');
     setNewTargetKg('500');
-
-    const updatedPlan: WeeklyProductionPlan = {
-      ...plan,
-      id: currentPlanId,
-      title,
-      week_number: Number(weekNumber),
-      month: Number(month),
-      year: Number(year),
-      start_date: startDate,
-      end_date: endDate,
-      notes,
-      targets: updatedTargets,
-    };
-
-    onSavePlan(updatedPlan);
-    showNotification(`Berhasil menambahkan ${newItem.sku_name} ke target!`);
+    showNotification(`Barang ${newItem.sku_name} ditambahkan ke target!`);
   };
 
   // Save Plan
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isReadOnly) return;
+    if (isReadOnly || !isDirty) return;
 
     const updatedPlan: WeeklyProductionPlan = {
       id: currentPlanId,
@@ -339,6 +382,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     };
 
     onSavePlan(updatedPlan);
+    setLastSavedSnapshot(currentSnapshot);
     showNotification(`Plan Minggu Ke-${weekNumber} (${getMonthName(month)} ${year}) berhasil disimpan!`);
   };
 
@@ -411,6 +455,19 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       status: 'active',
     };
     onSavePlan(updatedPlan);
+    setLastSavedSnapshot(
+      computePlanSnapshot(
+        currentPlanId,
+        title,
+        startDate,
+        endDate,
+        notes,
+        month,
+        weekNumber,
+        year,
+        mergedTargets
+      )
+    );
 
     setIsImportModalOpen(false);
     setImportFile(null);
@@ -481,41 +538,6 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
         )}
       </div>
 
-      {/* Plan Selector & Quick Switcher */}
-      {plans && plans.length > 0 && onSelectPlan && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center space-x-2 text-xs text-slate-300">
-            <Layers className="w-4 h-4 text-rose-500" />
-            <span className="font-semibold text-slate-300">Pilih Rencana Produksi:</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <select
-              value={currentPlanId}
-              onChange={(e) => {
-                const target = plans.find(p => p.id === e.target.value);
-                if (target) onSelectPlan(target);
-              }}
-              className="bg-black border border-slate-800 focus:border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none cursor-pointer"
-            >
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {getMonthName(p.month || Number(p.start_date.split('-')[1]))} {p.year} - Minggu {p.week_number} ({p.title})
-                </option>
-              ))}
-            </select>
-            {!isReadOnly && (
-              <button
-                type="button"
-                onClick={handleCreateNewPlan}
-                className="px-2.5 py-1.5 text-xs rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Plan Baru</span>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Plan Configuration Form */}
       <form onSubmit={handleSave} className="space-y-4">
@@ -878,10 +900,24 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
         {!isReadOnly && (
           <button
             type="submit"
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-950/40 active:scale-[0.98] transition flex items-center justify-center space-x-2 cursor-pointer"
+            disabled={!isDirty}
+            className={`w-full py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-center space-x-2 ${
+              isDirty
+                ? 'bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-600 text-white shadow-lg shadow-rose-950/40 active:scale-[0.98] cursor-pointer'
+                : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed shadow-none'
+            }`}
           >
-            <Save className="w-4 h-4" />
-            <span>Simpan & Terapkan Rencana Mingguan</span>
+            {isDirty ? (
+              <>
+                <Save className="w-4 h-4 text-white" />
+                <span>Simpan & Terapkan Rencana Mingguan</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />
+                <span>Rencana Tersimpan (Tidak Ada Perubahan)</span>
+              </>
+            )}
           </button>
         )}
       </form>
