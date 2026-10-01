@@ -154,33 +154,49 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  // Sync state saat plan aktif dari luar berubah
-  useEffect(() => {
-    setCurrentPlanId(plan.id);
-    const pMonth = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
-    const pWeek = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
-    setMonth(pMonth);
-    setWeekNumber(pWeek);
-    setYear(plan.year || 2026);
-    setTitle(plan.title);
-    setStartDate(plan.start_date);
-    setEndDate(plan.end_date);
-    setNotes(plan.notes || '');
-    setTargets(plan.targets || []);
-    setLastSavedSnapshot(
-      computePlanSnapshot(
-        plan.id,
-        plan.title,
-        plan.start_date,
-        plan.end_date,
-        plan.notes || '',
-        pMonth,
-        pWeek,
-        plan.year || 2026,
-        plan.targets || []
-      )
+  // Compute current plan snapshot and dirty state
+  const currentSnapshot = useMemo(() => {
+    return computePlanSnapshot(
+      currentPlanId,
+      title,
+      startDate,
+      endDate,
+      notes,
+      month,
+      weekNumber,
+      year,
+      targets
     );
-  }, [plan.id]);
+  }, [currentPlanId, title, startDate, endDate, notes, month, weekNumber, year, targets]);
+
+  const isDirty = currentSnapshot !== lastSavedSnapshot;
+
+  // Jika ada pembaruan data targets dari server untuk plan yang sedang dibuka (dan form belum diedit user)
+  useEffect(() => {
+    if (!isDirty && currentPlanId) {
+      const latest = plans.find(p => p.id === currentPlanId);
+      if (latest && JSON.stringify(latest.targets) !== JSON.stringify(targets)) {
+        setTargets(latest.targets || []);
+        setTitle(latest.title);
+        setStartDate(latest.start_date);
+        setEndDate(latest.end_date);
+        setNotes(latest.notes || '');
+        setLastSavedSnapshot(
+          computePlanSnapshot(
+            latest.id,
+            latest.title,
+            latest.start_date,
+            latest.end_date,
+            latest.notes || '',
+            month,
+            weekNumber,
+            year,
+            latest.targets || []
+          )
+        );
+      }
+    }
+  }, [plans, currentPlanId, isDirty, month, weekNumber, year, targets]);
 
   const showNotification = (msg: string) => {
     setSuccessMessage(msg);
@@ -229,7 +245,6 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
           existing.targets || []
         )
       );
-      if (onSelectPlan) onSelectPlan(existing);
     } else {
       // Periode baru: ID baru dan target bersih (kosong) agar produk dari minggu sebelumnya tidak menempel
       const newId = `plan-m${newMonth}-w${newWeek}-${newYear}-${Date.now().toString(36).substr(2, 4)}`;
@@ -252,22 +267,6 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     }
   };
 
-  // Compute current plan snapshot and dirty state
-  const currentSnapshot = useMemo(() => {
-    return computePlanSnapshot(
-      currentPlanId,
-      title,
-      startDate,
-      endDate,
-      notes,
-      month,
-      weekNumber,
-      year,
-      targets
-    );
-  }, [currentPlanId, title, startDate, endDate, notes, month, weekNumber, year, targets]);
-
-  const isDirty = currentSnapshot !== lastSavedSnapshot;
 
   // Salin target dari plan lain
   const handleCopyTargetsFrom = (sourcePlanId: string) => {

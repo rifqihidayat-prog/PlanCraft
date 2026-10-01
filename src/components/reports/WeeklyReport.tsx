@@ -27,7 +27,6 @@ interface WeeklyReportProps {
 export const WeeklyReport: React.FC<WeeklyReportProps> = ({
   plan,
   plans = [],
-  onSelectPlan,
   logs,
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<number>(() => {
@@ -38,38 +37,41 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
     return w > 5 ? 1 : (w || 1);
   });
 
-  useEffect(() => {
-    const m = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
-    const w = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
-    setSelectedMonth(m);
-    setSelectedWeek(w);
-  }, [plan.id, plan.month, plan.week_number, plan.start_date]);
-
   const handlePeriodChange = (newMonth: number, newWeek: number) => {
     setSelectedMonth(newMonth);
     setSelectedWeek(newWeek);
-    if (plans && onSelectPlan) {
-      const matched = plans.find(
-        p => (p.month || Number(p.start_date.split('-')[1])) === newMonth && p.week_number === newWeek
-      );
-      if (matched) {
-        onSelectPlan(matched);
-      }
-    }
   };
 
-  const isMatchedPlan = useMemo(() => {
+  // Cari plan yang cocok dari daftar plans berdasarkan periode yang dipilih
+  const currentPlan = useMemo(() => {
+    const matched = plans.find(
+      p => (p.month || Number(p.start_date.split('-')[1])) === selectedMonth && p.week_number === selectedWeek
+    );
+    if (matched) return matched;
     const pMonth = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
     const pWeek = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
-    return pMonth === selectedMonth && pWeek === selectedWeek;
-  }, [plan, selectedMonth, selectedWeek]);
+    if (pMonth === selectedMonth && pWeek === selectedWeek) return plan;
+    return null;
+  }, [plans, selectedMonth, selectedWeek, plan]);
 
-  const planMonth = plan.month || Number(plan.start_date.split('-')[1]) || 10;
+  const isMatchedPlan = Boolean(currentPlan);
+  const planMonth = currentPlan ? (currentPlan.month || Number(currentPlan.start_date.split('-')[1]) || 10) : selectedMonth;
+  const planYear = currentPlan?.year || plan.year || 2026;
 
   // Summary dihitung khusus untuk plan yang sedang aktif/terpilih
   const effectiveSummary = useMemo(() => {
-    return calculateWeeklySummary([plan], logs);
-  }, [plan, logs]);
+    if (!currentPlan) {
+      return {
+        total_target_kg: 0,
+        total_actual_kg: 0,
+        remaining_target_kg: 0,
+        achievement_rate: 0,
+        status: 'warning' as const,
+        active_days: 0,
+      };
+    }
+    return calculateWeeklySummary([currentPlan], logs);
+  }, [currentPlan, logs]);
 
   // Generate list of working days dates from start_date to end_date
   const getDatesBetween = (start: string, end: string) => {
@@ -97,18 +99,30 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
     return dates;
   };
 
-  const weekDates = getDatesBetween(plan.start_date, plan.end_date);
-  const planLogs = logs.filter(l => l.plan_id === plan.id);
+  const weekDates = useMemo(() => {
+    if (!currentPlan?.start_date || !currentPlan?.end_date) return [];
+    return getDatesBetween(currentPlan.start_date, currentPlan.end_date);
+  }, [currentPlan?.start_date, currentPlan?.end_date]);
+
+  const planLogs = useMemo(() => {
+    if (!currentPlan?.id) return [];
+    return logs.filter(l => l.plan_id === currentPlan.id);
+  }, [logs, currentPlan?.id]);
+
   const totalDiff = effectiveSummary.total_actual_kg - effectiveSummary.total_target_kg;
 
   // Export CSV handler (without susut and yield)
   const handleExportCSV = () => {
+    if (!currentPlan) {
+      alert('Tidak ada rencana produksi pada periode ini untuk diexport.');
+      return;
+    }
     const dateHeaders = weekDates.map(d => `${d.dayName} (${d.shortDate})`).join(',');
-    let csv = `Laporan Realisasi Produksi PlanCraft - Bulan ${getMonthName(planMonth)} Minggu Ke-${plan.week_number} (${plan.year})\n`;
-    csv += `Periode: ${plan.start_date} s/d ${plan.end_date}\n\n`;
+    let csv = `Laporan Realisasi Produksi PlanCraft - Bulan ${getMonthName(planMonth)} Minggu Ke-${currentPlan.week_number} (${planYear})\n`;
+    csv += `Periode: ${currentPlan.start_date} s/d ${currentPlan.end_date}\n\n`;
     csv += `Kode SKU,Nama Produk,Kategori,Target (Kg),${dateHeaders},Total Aktual (Kg),Selisih (Kg),Capaian (%)\n`;
 
-    plan.targets.forEach(target => {
+    (currentPlan.targets || []).forEach(target => {
       const skuLogs = planLogs.filter(l => l.sku_id === target.sku_id);
       const totalActual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
       const diff = totalActual - target.target_kg;
@@ -130,7 +144,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `PlanCraft_Report_${plan.year}_M${planMonth}_W${plan.week_number}.csv`);
+    link.setAttribute('download', `PlanCraft_Report_${planYear}_M${planMonth}_W${currentPlan.week_number}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -202,7 +216,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
             </span>
             {isMatchedPlan ? (
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                {plan.status === 'active' ? 'Aktif' : 'Tersedia'}
+                {currentPlan?.status === 'active' ? 'Aktif' : 'Tersedia'}
               </span>
             ) : (
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 font-bold">
@@ -211,7 +225,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
             )}
           </div>
           <span className="text-[10px] text-slate-400">
-            {isMatchedPlan ? `${plan.start_date} s/d ${plan.end_date}` : 'Belum ada rencana produksi untuk minggu ini'}
+            {currentPlan ? `${currentPlan.start_date} s/d ${currentPlan.end_date}` : 'Belum ada rencana produksi untuk minggu ini'}
           </span>
         </div>
       </div>
@@ -224,7 +238,7 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
             Rekap & Laporan Evaluasi Mingguan
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Bulan {getMonthName(selectedMonth)} {plan.year} • Minggu Ke-{selectedWeek} ({plan.start_date} s/d {plan.end_date})
+            Bulan {getMonthName(selectedMonth)} {planYear} • Minggu Ke-{selectedWeek} {currentPlan ? `(${currentPlan.start_date} s/d ${currentPlan.end_date})` : ''}
           </p>
         </div>
 
@@ -300,14 +314,14 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {(!plan.targets || plan.targets.length === 0) ? (
+              {(!currentPlan || !currentPlan.targets || currentPlan.targets.length === 0) ? (
                 <tr>
                   <td colSpan={weekDates.length + 5} className="py-8 text-center text-xs text-slate-500">
                     Belum ada target produk yang direncanakan untuk pekan ini. Silakan buat rencana di menu Plan terlebih dahulu.
                   </td>
                 </tr>
               ) : (
-                plan.targets.map(target => {
+                currentPlan.targets.map(target => {
                   const skuLogs = planLogs.filter(l => l.sku_id === target.sku_id);
                   const actual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
                   const diff = actual - target.target_kg;

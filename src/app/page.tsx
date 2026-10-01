@@ -219,8 +219,8 @@ export default function HomePage() {
     setActivePlanId(plan.id);
     if (currentUser?.role === 'admin') {
       await setActivePlanOnServer(plan.id);
+      await handleRefresh();
     }
-    await handleRefresh();
   };
 
   const handleUpdateSKUs = async (newSkus: ProductSKU[]) => {
@@ -321,7 +321,6 @@ export default function HomePage() {
             skus={skus}
             currentUser={currentUser}
             onSavePlan={handleSavePlan}
-            onSelectPlan={handleSelectPlan}
           />
         );
       case 'reports':
@@ -329,7 +328,6 @@ export default function HomePage() {
           <WeeklyReport
             plan={activePlan}
             plans={plans}
-            onSelectPlan={handleSelectPlan}
             logs={logs}
             summary={summary}
           />
