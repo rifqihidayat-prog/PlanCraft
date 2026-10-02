@@ -109,9 +109,46 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
     return logs.filter(l => l.plan_id === currentPlan.id);
   }, [logs, currentPlan?.id]);
 
+  // Gabungkan target rencana dan produk di luar rencana yang diinput produksi
+  const combinedReportItems = useMemo(() => {
+    if (!currentPlan) return [];
+    const items: Array<{
+      sku_id: string;
+      sku_code: string;
+      sku_name: string;
+      category: string;
+      target_kg: number;
+      isUnplanned: boolean;
+    }> = (currentPlan.targets || []).map(t => ({
+      sku_id: t.sku_id,
+      sku_code: t.sku_code,
+      sku_name: t.sku_name,
+      category: t.category || '-',
+      target_kg: t.target_kg,
+      isUnplanned: false,
+    }));
+
+    const plannedSkuIds = new Set(items.map(i => i.sku_id));
+    planLogs.forEach(l => {
+      if (!plannedSkuIds.has(l.sku_id)) {
+        plannedSkuIds.add(l.sku_id);
+        items.push({
+          sku_id: l.sku_id,
+          sku_code: l.sku_code,
+          sku_name: l.sku_name,
+          category: 'Non-Plan',
+          target_kg: 0,
+          isUnplanned: true,
+        });
+      }
+    });
+
+    return items;
+  }, [currentPlan, planLogs]);
+
   const totalDiff = effectiveSummary.total_actual_kg - effectiveSummary.total_target_kg;
 
-  // Export CSV handler (without susut and yield)
+  // Export CSV handler (including unplanned items with distinct mark)
   const handleExportCSV = () => {
     if (!currentPlan) {
       alert('Tidak ada rencana produksi pada periode ini untuk diexport.');
@@ -122,11 +159,15 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
     csv += `Periode: ${currentPlan.start_date} s/d ${currentPlan.end_date}\n\n`;
     csv += `Kode SKU,Nama Produk,Kategori,Target (Kg),${dateHeaders},Total Aktual (Kg),Selisih (Kg),Capaian (%)\n`;
 
-    (currentPlan.targets || []).forEach(target => {
+    combinedReportItems.forEach(target => {
       const skuLogs = planLogs.filter(l => l.sku_id === target.sku_id);
       const totalActual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
       const diff = totalActual - target.target_kg;
-      const pct = target.target_kg > 0 ? (totalActual / target.target_kg) * 100 : 0;
+      const pctStr = target.isUnplanned 
+        ? 'Non-Plan' 
+        : target.target_kg > 0 
+        ? `${((totalActual / target.target_kg) * 100).toFixed(1)}%` 
+        : '0%';
 
       const dailyValues = weekDates.map(d => {
         const dayLogs = skuLogs.filter(l => l.date === d.dateStr);
@@ -134,10 +175,13 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
         return daySum > 0 ? daySum.toFixed(1) : '0';
       }).join(',');
 
-      csv += `"${target.sku_code}","${target.sku_name}","${target.category}",${target.target_kg},${dailyValues},${totalActual.toFixed(1)},${diff.toFixed(1)},${pct.toFixed(1)}%\n`;
+      const displayName = target.isUnplanned ? `${target.sku_name} (Tidak Ada di Plan)` : target.sku_name;
+      const displayCategory = target.isUnplanned ? `${target.category} (Non-Plan)` : target.category;
+
+      csv += `"${target.sku_code}","${displayName}","${displayCategory}",${target.target_kg},${dailyValues},${totalActual.toFixed(1)},${diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)},${pctStr}\n`;
     });
 
-    csv += `\nTOTAL RINGKASAN,,,,${effectiveSummary.total_target_kg},${effectiveSummary.total_actual_kg},${totalDiff.toFixed(1)},${effectiveSummary.achievement_rate}%\n`;
+    csv += `\nTOTAL RINGKASAN,,,,${effectiveSummary.total_target_kg},${effectiveSummary.total_actual_kg},${totalDiff >= 0 ? `+${totalDiff.toFixed(1)}` : totalDiff.toFixed(1)},${effectiveSummary.achievement_rate}%\n`;
 
     // Download trigger
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -314,27 +358,38 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {(!currentPlan || !currentPlan.targets || currentPlan.targets.length === 0) ? (
+              {(!currentPlan || combinedReportItems.length === 0) ? (
                 <tr>
                   <td colSpan={weekDates.length + 5} className="py-8 text-center text-xs text-slate-500">
-                    Belum ada target produk yang direncanakan untuk pekan ini. Silakan buat rencana di menu Plan terlebih dahulu.
+                    Belum ada target produk atau riwayat produksi yang tercatat pada pekan ini.
                   </td>
                 </tr>
               ) : (
-                currentPlan.targets.map(target => {
+                combinedReportItems.map(target => {
                   const skuLogs = planLogs.filter(l => l.sku_id === target.sku_id);
                   const actual = skuLogs.reduce((acc, l) => acc + l.actual_kg, 0);
                   const diff = actual - target.target_kg;
                   const pct = target.target_kg > 0 ? (actual / target.target_kg) * 100 : 0;
 
                   return (
-                    <tr key={target.sku_id} className="hover:bg-slate-950/40 transition">
+                    <tr key={target.sku_id} className={`hover:bg-slate-950/40 transition ${target.isUnplanned ? 'bg-amber-950/10' : ''}`}>
                       <td className="py-2.5 px-3 font-medium text-white">
-                        <div className="truncate font-semibold">{target.sku_name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="truncate font-semibold">{target.sku_name}</span>
+                          {target.isUnplanned && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold whitespace-nowrap">
+                              Tidak Ada di Plan
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-slate-500 font-mono">{target.sku_code}</div>
                       </td>
                       <td className="py-2.5 px-2 text-right font-bold text-slate-300">
-                        {formatKg(target.target_kg)}
+                        {target.isUnplanned ? (
+                          <span className="text-amber-400/80 font-normal italic">0 Kg</span>
+                        ) : (
+                          formatKg(target.target_kg)
+                        )}
                       </td>
 
                       {weekDates.map(d => {
@@ -353,14 +408,20 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
                         {formatKg(actual)}
                       </td>
                       <td className={`py-2.5 px-2 text-right font-bold bg-slate-950/30 ${
-                        diff >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        target.isUnplanned || diff >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}>
-                        {diff >= 0 ? `+${formatKg(diff)}` : formatKg(diff)}
+                        {target.isUnplanned || diff >= 0 ? `+${formatKg(actual)}` : formatKg(diff)}
                       </td>
                       <td className="py-2.5 px-3 text-right font-black bg-slate-950/30">
-                        <span className={pct >= 95 ? 'text-emerald-400' : pct >= 80 ? 'text-amber-400' : 'text-rose-400'}>
-                          {formatPercent(pct)}
-                        </span>
+                        {target.isUnplanned ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                            Non-Plan
+                          </span>
+                        ) : (
+                          <span className={pct >= 95 ? 'text-emerald-400' : pct >= 80 ? 'text-amber-400' : 'text-rose-400'}>
+                            {formatPercent(pct)}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

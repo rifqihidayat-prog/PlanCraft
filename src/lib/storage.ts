@@ -36,18 +36,45 @@ export function saveStoredSKUs(skus: ProductSKU[]): void {
   }
 }
 
+export function deduplicatePlansList(plans: WeeklyProductionPlan[]): WeeklyProductionPlan[] {
+  const map = new Map<string, WeeklyProductionPlan>();
+  plans.forEach(p => {
+    const m = p.month || Number(p.start_date?.split('-')[1]) || 10;
+    const w = Number(p.week_number) > 5 ? 1 : (Number(p.week_number) || 1);
+    const y = p.year || 2026;
+    const key = `${y}-${m}-${w}`;
+    if (!map.has(key)) {
+      map.set(key, p);
+    } else {
+      const existing = map.get(key)!;
+      if (p.status === 'active' && existing.status !== 'active') {
+        map.set(key, p);
+      } else if ((p.targets?.length || 0) > (existing.targets?.length || 0) && existing.status !== 'active') {
+        map.set(key, p);
+      }
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => {
+    if ((b.year || 2026) !== (a.year || 2026)) return (b.year || 2026) - (a.year || 2026);
+    const bMonth = b.month || Number(b.start_date?.split('-')[1]) || 10;
+    const aMonth = a.month || Number(a.start_date?.split('-')[1]) || 10;
+    if (bMonth !== aMonth) return bMonth - aMonth;
+    return a.week_number - b.week_number;
+  });
+}
+
 export function getStoredPlans(): WeeklyProductionPlan[] {
-  if (!isClient) return INITIAL_PLANS;
+  if (!isClient) return deduplicatePlansList(INITIAL_PLANS);
   try {
     const data = localStorage.getItem(STORAGE_KEYS.PLANS);
     if (!data) {
       localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify(INITIAL_PLANS));
-      return INITIAL_PLANS;
+      return deduplicatePlansList(INITIAL_PLANS);
     }
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_PLANS;
+    return Array.isArray(parsed) && parsed.length > 0 ? deduplicatePlansList(parsed) : deduplicatePlansList(INITIAL_PLANS);
   } catch {
-    return INITIAL_PLANS;
+    return deduplicatePlansList(INITIAL_PLANS);
   }
 }
 

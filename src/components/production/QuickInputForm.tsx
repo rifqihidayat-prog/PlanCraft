@@ -124,6 +124,22 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
     return map;
   }, [logs, plan.id]);
 
+  // Set SKU ID yang terdaftar dalam target plan
+  const plannedSkuIdSet = useMemo(() => new Set((plan.targets || []).map(t => t.sku_id)), [plan.targets]);
+
+  // Log produksi yang diinput untuk plan ini namun tidak terdaftar di targets (Non-Plan)
+  const unplannedLogsInPlan = useMemo(() => {
+    const map = new Map<string, { sku_id: string; sku_code: string; sku_name: string; actual_kg: number }>();
+    logs.filter(l => l.plan_id === plan.id && !plannedSkuIdSet.has(l.sku_id)).forEach(l => {
+      if (!map.has(l.sku_id)) {
+        map.set(l.sku_id, { sku_id: l.sku_id, sku_code: l.sku_code, sku_name: l.sku_name, actual_kg: l.actual_kg });
+      } else {
+        map.get(l.sku_id)!.actual_kg += l.actual_kg;
+      }
+    });
+    return Array.from(map.values());
+  }, [logs, plan.id, plannedSkuIdSet]);
+
   // Filtered SKUs for autocomplete
   const filteredOptions = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -380,6 +396,38 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                   </div>
                 );
               })
+            )}
+
+            {unplannedLogsInPlan.length > 0 && (
+              <div className="pt-2.5 mt-2 border-t border-slate-800 space-y-2">
+                <p className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  Produksi Tambahan (Tidak Ada di Plan):
+                </p>
+                {unplannedLogsInPlan.map((u) => (
+                  <div
+                    key={u.sku_id}
+                    className="p-2.5 bg-amber-950/20 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                          {u.sku_code}
+                        </span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                          Non-Plan
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-white mt-1 truncate">
+                        {u.sku_name}
+                      </p>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        Total Realisasi: <strong className="text-emerald-400">{formatKg(u.actual_kg)} Kg</strong> • (Target: 0 Kg)
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -740,6 +788,11 @@ export const QuickInputForm: React.FC<QuickInputFormProps> = ({
                       <Calendar className="w-2.5 h-2.5 text-rose-400" />
                       {log.date}
                     </span>
+                    {!plannedSkuIdSet.has(log.sku_id) && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                        Tidak Ada di Plan
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-xs font-bold text-white mt-1 truncate">
                     {log.sku_name}

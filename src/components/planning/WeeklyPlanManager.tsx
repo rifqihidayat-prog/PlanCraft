@@ -26,7 +26,7 @@ import {
   ShieldAlert,
   Check
 } from 'lucide-react';
-import { parseExcelFile, downloadExcelTemplate, exportPlanToExcel, ExcelImportRow } from '@/lib/excelHelper';
+import { parseExcelFile, downloadExcelTemplate, exportPlanToExcel, exportMonthlyPlanToExcel, ExcelImportRow } from '@/lib/excelHelper';
 
 interface WeeklyPlanManagerProps {
   plan: WeeklyProductionPlan;
@@ -146,6 +146,9 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   // Copy targets modal / selector
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
 
+  // Export Modal State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
   // Excel Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -204,6 +207,11 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     setTimeout(() => setSavedSuccess(false), 3500);
   };
 
+  // Helper normalisasi judul ke format ringkas: Week X - Plan Produksi [Bulan] [Tahun]
+  const formatStandardTitle = (w: number, m: number, y: number) => {
+    return `Week ${w} - Plan Produksi ${getMonthName(m)} ${y}`;
+  };
+
   // Handler pergantian periode (Bulan, Week 1-5, Tahun) dengan isolasi plan per minggu
   const handlePeriodChange = (newMonth: number, newWeek: number, newYear: number) => {
     setMonth(newMonth);
@@ -213,7 +221,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     const est = getEstimatedWeekDates(newYear, newMonth, newWeek);
     setStartDate(est.start);
     setEndDate(est.end);
-    const defaultTitle = `Plan Produksi Minggu Ke-${newWeek} (${getMonthName(newMonth)} ${newYear})`;
+    const defaultTitle = formatStandardTitle(newWeek, newMonth, newYear);
     setTitle(defaultTitle);
 
     // Cari apakah sudah ada plan di database untuk periode (year, month, week_number) ini
@@ -226,8 +234,13 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
 
     if (existing) {
       // Muat data plan tersebut beserta target produk miliknya
+      // Gunakan judul standar jika masih menggunakan format lama
+      const cleanTitle = (!existing.title || existing.title.startsWith('Plan Produksi Minggu Ke-'))
+        ? defaultTitle
+        : existing.title;
+
       setCurrentPlanId(existing.id);
-      setTitle(existing.title || defaultTitle);
+      setTitle(cleanTitle);
       setStartDate(existing.start_date || est.start);
       setEndDate(existing.end_date || est.end);
       setTargets(existing.targets || []);
@@ -235,7 +248,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       setLastSavedSnapshot(
         computePlanSnapshot(
           existing.id,
-          existing.title || defaultTitle,
+          cleanTitle,
           existing.start_date || est.start,
           existing.end_date || est.end,
           existing.notes || '',
@@ -278,10 +291,10 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     showNotification(`Berhasil menyalin ${source.targets.length} target barang dari ${source.title}!`);
   };
 
-  // Export Target Plan ke Excel
-  const handleExportExcel = () => {
+  // Export Target Plan Pekan Ini ke Excel
+  const handleExportCurrentWeek = () => {
     if (!targets || targets.length === 0) {
-      alert('Tidak ada target barang pada rencana minggu ini untuk diexport.');
+      alert(`Tidak ada target barang pada Week ${weekNumber} untuk diexport.`);
       return;
     }
     const currentPlan: WeeklyProductionPlan = {
@@ -297,7 +310,40 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       status: 'active',
     };
     exportPlanToExcel(currentPlan);
-    showNotification('File Excel target plan berhasil diunduh!');
+    setIsExportModalOpen(false);
+    showNotification(`File Excel target Week ${weekNumber} berhasil diunduh!`);
+  };
+
+  // Export Rekap Target Plan 1 Bulan Penuh (W1 - W5) ke Excel
+  const handleExportFullMonth = () => {
+    try {
+      const currentPlan: WeeklyProductionPlan = {
+        id: currentPlanId,
+        title,
+        week_number: Number(weekNumber),
+        month: Number(month),
+        year: Number(year),
+        start_date: startDate,
+        end_date: endDate,
+        notes,
+        targets,
+        status: 'active',
+      };
+
+      const combinedPlans = [...plans];
+      const idx = combinedPlans.findIndex(p => p.id === currentPlanId);
+      if (idx >= 0) {
+        combinedPlans[idx] = currentPlan;
+      } else {
+        combinedPlans.push(currentPlan);
+      }
+
+      exportMonthlyPlanToExcel(Number(month), Number(year), combinedPlans);
+      setIsExportModalOpen(false);
+      showNotification(`File Excel target bulanan ${getMonthName(month)} ${year} berhasil diunduh!`);
+    } catch (err: any) {
+      alert(err.message || 'Gagal mengekspor data bulanan ke Excel.');
+    }
   };
 
   // Total target
@@ -502,9 +548,9 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
           <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
             <button
               type="button"
-              onClick={handleExportExcel}
+              onClick={() => setIsExportModalOpen(true)}
               className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title="Unduh target kebutuhan minggu ini ke Excel"
+              title="Unduh target kebutuhan ke Excel"
             >
               <Download className="w-4 h-4" />
               <span>Export Excel</span>
@@ -518,9 +564,9 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
           <div className="flex items-center space-x-2 shrink-0">
             <button
               type="button"
-              onClick={handleExportExcel}
+              onClick={() => setIsExportModalOpen(true)}
               className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
-              title="Unduh target rencana minggu ini ke Excel"
+              title="Unduh target rencana ke Excel"
             >
               <Download className="w-4 h-4" />
               <span>Export Excel</span>
@@ -810,9 +856,9 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
               {targets.length > 0 && (
                 <button
                   type="button"
-                  onClick={handleExportExcel}
+                  onClick={() => setIsExportModalOpen(true)}
                   className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
-                  title="Export target pekan ini ke file Excel"
+                  title="Export target rencana ke file Excel"
                 >
                   <Download className="w-3 h-3" />
                   <span>Export</span>
@@ -1122,6 +1168,96 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
                 type="button"
                 onClick={() => setIsCopyModalOpen(false)}
                 className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pilihan Export Plan Excel (Pekan Ini vs 1 Bulan Penuh) */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Download className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">Export Target Rencana ke Excel</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Pilih cakupan data rencana produksi yang ingin Anda unduh ke dalam format Excel (.xlsx):
+            </p>
+
+            <div className="space-y-3">
+              {/* Opsi 1: Export Minggu Ini */}
+              <div className="p-3.5 bg-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-2xl transition space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="w-4 h-4 text-rose-400" />
+                    <span className="text-xs font-bold text-white">Rencana Pekan Ini (Week {weekNumber})</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold">
+                    W{weekNumber} • {getMonthName(month)} {year}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Target produksi khusus minggu ke-{weekNumber} ({targets.length} SKU, {totalTargetKg.toLocaleString('id-ID')} Kg).
+                </p>
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleExportCurrentWeek}
+                    disabled={targets.length === 0}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-md"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Unduh Week {weekNumber}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Opsi 2: Export 1 Bulan Penuh */}
+              <div className="p-3.5 bg-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-2xl transition space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-white">Rencana 1 Bulan Penuh ({getMonthName(month)} {year})</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                    Rekap W1 - W5
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Rekapitulasi target seluruh pekan (Week 1 s/d Week 5) dalam 1 tabel master plus lembar kerja per pekan.
+                </p>
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleExportFullMonth}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-md"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Unduh Rekap 1 Bulan Penuh</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
               >
                 Tutup
               </button>

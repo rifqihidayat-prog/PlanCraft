@@ -20,8 +20,27 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
 }) => {
   const [activeTooltipIndex, setActiveTooltipIndex] = useState<number | null>(null);
 
-  // Sort plans chronologically by start_date ascending
-  const sortedPlans = [...plans].sort((a, b) => a.start_date.localeCompare(b.start_date));
+  // Deduplicate and sort plans chronologically by start_date ascending
+  const sortedPlans = React.useMemo(() => {
+    const map = new Map<string, WeeklyProductionPlan>();
+    plans.forEach((p) => {
+      const m = p.month || Number(p.start_date.split('-')[1]) || 10;
+      const w = Number(p.week_number) > 5 ? 1 : (Number(p.week_number) || 1);
+      const y = p.year || 2026;
+      const key = `${y}-${m}-${w}`;
+      if (!map.has(key)) {
+        map.set(key, p);
+      } else {
+        const existing = map.get(key)!;
+        if (p.status === 'active' && existing.status !== 'active') {
+          map.set(key, p);
+        } else if ((p.targets?.length || 0) > (existing.targets?.length || 0) && existing.status !== 'active') {
+          map.set(key, p);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.start_date.localeCompare(b.start_date));
+  }, [plans]);
 
   // Compute week data points
   const weekData = sortedPlans.map((plan) => {

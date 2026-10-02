@@ -19,7 +19,8 @@ import {
   saveStoredLogs, 
   addDailyLog, 
   deleteDailyLog, 
-  calculateWeeklySummary 
+  calculateWeeklySummary,
+  deduplicatePlansList
 } from '@/lib/storage';
 import { 
   fetchInitialData, 
@@ -234,17 +235,18 @@ export default function HomePage() {
 
   // Calculate summary based on month and week filter
   const targetPlansForSummary = React.useMemo(() => {
-    if (selectedWeekFilter === 'all') return plans;
+    const deduped = deduplicatePlansList(plans);
+    if (selectedWeekFilter === 'all') return deduped;
     if (selectedWeekFilter.startsWith('month-')) {
       const parts = selectedWeekFilter.split('-');
       const m = Number(parts[1]);
       const y = Number(parts[2]);
-      return plans.filter(p => {
+      return deduped.filter(p => {
         const pMonth = p.month || Number(p.start_date.split('-')[1]) || 10;
-        return pMonth === m && p.year === y;
+        return pMonth === m && (p.year || 2026) === y;
       });
     }
-    return plans.filter(p => p.id === selectedWeekFilter);
+    return deduped.filter(p => p.id === selectedWeekFilter);
   }, [plans, selectedWeekFilter]);
 
   const summary: WeeklySummary = calculateWeeklySummary(

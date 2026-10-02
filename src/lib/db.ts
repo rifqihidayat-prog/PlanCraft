@@ -131,11 +131,44 @@ function initSchemaAndSeed(db: Database.Database) {
     SET month = CAST(strftime('%m', start_date) AS INTEGER) 
     WHERE month IS NULL OR month = 0;
 
-    UPDATE production_plans SET week_number = 3, month = 9, title = 'Plan Produksi Minggu Ke-3 (September 2026)' WHERE id = 'plan-w38-2026' AND week_number > 5;
-    UPDATE production_plans SET week_number = 4, month = 9, title = 'Plan Produksi Minggu Ke-4 (September 2026)' WHERE id = 'plan-w39-2026' AND week_number > 5;
-    UPDATE production_plans SET week_number = 1, month = 10, title = 'Plan Produksi Minggu Ke-1 (Oktober 2026)' WHERE id = 'plan-w40-2026' AND week_number > 5;
-    UPDATE production_plans SET week_number = 2, month = 10, title = 'Plan Produksi Minggu Ke-2 (Oktober 2026)' WHERE id = 'plan-w41-2026' AND week_number > 5;
+    UPDATE production_plans SET week_number = 3, month = 9, title = 'Week 3 - Plan Produksi September 2026' WHERE id = 'plan-w38-2026' AND (title LIKE 'Plan Produksi Minggu Ke%' OR week_number > 5);
+    UPDATE production_plans SET week_number = 4, month = 9, title = 'Week 4 - Plan Produksi September 2026' WHERE id = 'plan-w39-2026' AND (title LIKE 'Plan Produksi Minggu Ke%' OR week_number > 5);
+    UPDATE production_plans SET week_number = 1, month = 10, title = 'Week 1 - Plan Produksi Oktober 2026' WHERE id = 'plan-w40-2026' AND (title LIKE 'Plan Produksi Minggu Ke%' OR week_number > 5);
+    UPDATE production_plans SET week_number = 2, month = 10, title = 'Week 2 - Plan Produksi Oktober 2026' WHERE id = 'plan-w41-2026' AND (title LIKE 'Plan Produksi Minggu Ke%' OR week_number > 5);
   `);
+
+  // Deduplicate rencana produksi jika ada lebih dari 1 record untuk (year, month, week_number) yang sama
+  try {
+    const duplicateGroups = db.prepare(`
+      SELECT year, month, week_number, COUNT(*) as cnt 
+      FROM production_plans 
+      GROUP BY year, month, week_number 
+      HAVING cnt > 1
+    `).all() as Array<{ year: number; month: number; week_number: number }>;
+
+    for (const group of duplicateGroups) {
+      const groupPlans = db.prepare(`
+        SELECT p.id, p.status, (SELECT COUNT(*) FROM plan_targets pt WHERE pt.plan_id = p.id) as target_count
+        FROM production_plans p
+        WHERE p.year = ? AND p.month = ? AND p.week_number = ?
+        ORDER BY (CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) DESC, target_count DESC, p.id DESC
+      `).all(group.year, group.month, group.week_number) as Array<{ id: string; status: string; target_count: number }>;
+
+      if (groupPlans.length > 1) {
+        const canonicalId = groupPlans[0].id;
+        const duplicateIds = groupPlans.slice(1).map(p => p.id);
+
+        for (const dupId of duplicateIds) {
+          db.prepare('UPDATE production_logs SET plan_id = ? WHERE plan_id = ?').run(canonicalId, dupId);
+          db.prepare("UPDATE app_settings SET value = ? WHERE key = 'active_plan_id' AND value = ?").run(canonicalId, dupId);
+          db.prepare('DELETE FROM plan_targets WHERE plan_id = ?').run(dupId);
+          db.prepare('DELETE FROM production_plans WHERE id = ?').run(dupId);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error during deduplication migration:', err);
+  }
 
   // 2. Seed users and apply environment PINs once, then preserve UI changes.
   const envAdminPin = process.env.ADMIN_PIN?.trim();
@@ -334,7 +367,7 @@ export function getAllPlans(): WeeklyProductionPlan[] {
 
   const getTargetsStmt = db.prepare('SELECT * FROM plan_targets WHERE plan_id = ?');
 
-  return plans.map(p => {
+  const mappedPlans = plans.map(p => {
     const targets = getTargetsStmt.all(p.id) as Array<{
       sku_id: string;
       sku_code: string;
@@ -363,6 +396,28 @@ export function getAllPlans(): WeeklyProductionPlan[] {
         target_kg: t.target_kg,
       })),
     };
+  });
+
+  // Deduplicate: tepat 1 rencana per periode (year, month, week_number)
+  const map = new Map<string, WeeklyProductionPlan>();
+  mappedPlans.forEach(p => {
+    const key = `${p.year}-${p.month}-${p.week_number}`;
+    if (!map.has(key)) {
+      map.set(key, p);
+    } else {
+      const existing = map.get(key)!;
+      if (p.status === 'active' && existing.status !== 'active') {
+        map.set(key, p);
+      } else if (p.targets.length > existing.targets.length && existing.status !== 'active') {
+        map.set(key, p);
+      }
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => {
+    if (b.year !== a.year) return b.year - a.year;
+    if (b.month !== a.month) return b.month - a.month;
+    return a.week_number - b.week_number;
   });
 }
 
@@ -415,6 +470,21 @@ export function savePlan(plan: WeeklyProductionPlan): void {
 
   const tx = db.transaction((p: WeeklyProductionPlan) => {
     const planMonth = p.month || Number(p.start_date.split('-')[1]) || 1;
+    const planWeek = Number(p.week_number) > 5 ? 1 : (Number(p.week_number) || 1);
+    const planYear = p.year || 2026;
+
+    // Bersihkan duplicate plan yang memiliki periode sama tapi id berbeda
+    const existingDups = db.prepare(
+      'SELECT id FROM production_plans WHERE year = ? AND month = ? AND week_number = ? AND id != ?'
+    ).all(planYear, planMonth, planWeek, p.id) as Array<{ id: string }>;
+
+    for (const dup of existingDups) {
+      db.prepare('UPDATE production_logs SET plan_id = ? WHERE plan_id = ?').run(p.id, dup.id);
+      db.prepare("UPDATE app_settings SET value = ? WHERE key = 'active_plan_id' AND value = ?").run(p.id, dup.id);
+      db.prepare('DELETE FROM plan_targets WHERE plan_id = ?').run(dup.id);
+      db.prepare('DELETE FROM production_plans WHERE id = ?').run(dup.id);
+    }
+
     if (p.status === 'active') {
       db.prepare("UPDATE production_plans SET status = 'completed' WHERE status = 'active' AND id != ?").run(p.id);
       db.prepare(`
@@ -422,7 +492,7 @@ export function savePlan(plan: WeeklyProductionPlan): void {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(p.id);
     }
-    upsertPlan.run(p.id, p.title, p.week_number, planMonth, p.year, p.start_date, p.end_date, p.status, p.notes || null);
+    upsertPlan.run(p.id, p.title, planWeek, planMonth, planYear, p.start_date, p.end_date, p.status, p.notes || null);
     deleteTargets.run(p.id);
     for (const t of p.targets) {
       const targetId = `${p.id}_${t.sku_id}`;

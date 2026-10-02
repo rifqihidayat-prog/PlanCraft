@@ -8,7 +8,7 @@ import {
   getMonthName,
   getMonthShortName
 } from '@/types';
-import { formatKg, formatPercent } from '@/lib/storage';
+import { formatKg, formatPercent, deduplicatePlansList } from '@/lib/storage';
 import { WeeklyLineChart } from './WeeklyLineChart';
 import { 
   TrendingUp, 
@@ -43,15 +43,18 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
   onNavigateToInput,
   onNavigateToPlanning,
 }) => {
+  // Pastikan rencana tidak mengalami duplikasi per (tahun, bulan, minggu)
+  const dedupedPlans = React.useMemo(() => deduplicatePlansList(plans), [plans]);
+
   const isAllWeeks = selectedWeekFilter === 'all';
-  const currentPlan = isAllWeeks ? activePlan : (plans.find(p => p.id === selectedWeekFilter) || activePlan);
+  const currentPlan = isAllWeeks ? activePlan : (dedupedPlans.find(p => p.id === selectedWeekFilter) || activePlan);
 
   // Available months extracted from plans
   const availableMonths = React.useMemo(() => {
     const map = new Map<string, { month: number; year: number; label: string }>();
-    plans.forEach(p => {
+    dedupedPlans.forEach(p => {
       const m = p.month || Number(p.start_date.split('-')[1]) || 10;
-      const y = p.year;
+      const y = p.year || 2026;
       const key = `${m}-${y}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -65,7 +68,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
       if (b[1].year !== a[1].year) return b[1].year - a[1].year;
       return b[1].month - a[1].month;
     });
-  }, [plans]);
+  }, [dedupedPlans]);
 
   // Determine current selected month key
   const currentMonthKey = React.useMemo(() => {
@@ -74,27 +77,27 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
       const parts = selectedWeekFilter.split('-');
       return `${parts[1]}-${parts[2]}`;
     }
-    const found = plans.find(p => p.id === selectedWeekFilter);
+    const found = dedupedPlans.find(p => p.id === selectedWeekFilter);
     if (found) {
       const m = found.month || Number(found.start_date.split('-')[1]) || 10;
-      return `${m}-${found.year}`;
+      return `${m}-${found.year || 2026}`;
     }
     return 'all';
-  }, [selectedWeekFilter, plans]);
+  }, [selectedWeekFilter, dedupedPlans]);
 
   // Plans filtered by current month key (when not 'all')
   const filteredMonthPlans = React.useMemo(() => {
-    if (currentMonthKey === 'all') return plans;
+    if (currentMonthKey === 'all') return dedupedPlans;
     const [mStr, yStr] = currentMonthKey.split('-');
     const m = Number(mStr);
     const y = Number(yStr);
-    return plans
+    return dedupedPlans
       .filter(p => {
         const pMonth = p.month || Number(p.start_date.split('-')[1]) || 10;
-        return pMonth === m && p.year === y;
+        return pMonth === m && (p.year || 2026) === y;
       })
       .sort((a, b) => a.week_number - b.week_number);
-  }, [plans, currentMonthKey]);
+  }, [dedupedPlans, currentMonthKey]);
 
   const handleMonthChange = (monthKey: string) => {
     if (monthKey === 'all') {
@@ -170,14 +173,14 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
 
   // Aggregate targets across all or selected plans for SKU breakdown
   const targetSkuList = React.useMemo(() => {
-    let plansToConsider = plans;
+    let plansToConsider = dedupedPlans;
     if (selectedWeekFilter.startsWith('month-')) {
       const parts = selectedWeekFilter.split('-');
       const m = Number(parts[1]);
       const y = Number(parts[2]);
-      plansToConsider = plans.filter(p => {
+      plansToConsider = dedupedPlans.filter(p => {
         const pMonth = p.month || Number(p.start_date.split('-')[1]) || 10;
-        return pMonth === m && p.year === y;
+        return pMonth === m && (p.year || 2026) === y;
       });
     } else if (!isAllWeeks) {
       plansToConsider = [currentPlan];
@@ -189,10 +192,11 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
       sku_name: string;
       category: string;
       target_kg: number;
+      isUnplanned: boolean;
     }>();
 
     plansToConsider.forEach(p => {
-      p.targets.forEach(t => {
+      (p.targets || []).forEach(t => {
         if (!map.has(t.sku_id)) {
           map.set(t.sku_id, {
             sku_id: t.sku_id,
@@ -200,6 +204,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
             sku_name: t.sku_name,
             category: t.category,
             target_kg: t.target_kg,
+            isUnplanned: false,
           });
         } else {
           const existing = map.get(t.sku_id)!;
@@ -210,6 +215,20 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
 
     const relevantPlanIds = new Set(plansToConsider.map(p => p.id));
     const filteredLogs = logs.filter(l => relevantPlanIds.has(l.plan_id));
+
+    // Tambahkan produk yang diinput oleh tim produksi namun tidak terdapat dalam target rencana
+    filteredLogs.forEach(l => {
+      if (!map.has(l.sku_id)) {
+        map.set(l.sku_id, {
+          sku_id: l.sku_id,
+          sku_code: l.sku_code,
+          sku_name: l.sku_name,
+          category: 'Non-Plan',
+          target_kg: 0,
+          isUnplanned: true,
+        });
+      }
+    });
 
     return Array.from(map.values()).map(target => {
       const skuLogs = filteredLogs.filter(l => l.sku_id === target.sku_id);
@@ -223,7 +242,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         remaining_kg: Math.round(remaining * 10) / 10,
       };
     });
-  }, [isAllWeeks, plans, currentPlan, logs, selectedWeekFilter]);
+  }, [isAllWeeks, dedupedPlans, currentPlan, logs, selectedWeekFilter]);
 
   return (
     <div className="space-y-4 pb-20">
@@ -263,7 +282,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
               {currentMonthKey === 'all' ? (
                 <>
                   <option value="all">📊 Total Semua Pekan</option>
-                  {plans.map((p) => {
+                  {dedupedPlans.map((p) => {
                     const m = p.month || Number(p.start_date.split('-')[1]) || 10;
                     return (
                       <option key={p.id} value={p.id}>
@@ -407,7 +426,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
 
       {/* Line Chart Tren Produksi Mingguan (Target vs Realisasi Garis) */}
       <WeeklyLineChart 
-        plans={currentMonthKey === 'all' ? plans : filteredMonthPlans} 
+        plans={currentMonthKey === 'all' ? dedupedPlans : filteredMonthPlans} 
         logs={logs} 
         titleSuffix={currentMonthKey === 'all' ? 'Semua Bulan' : (selectedMonthInfo?.label || 'Bulan Terpilih')}
         selectedPlanId={selectedWeekFilter.startsWith('month-') || selectedWeekFilter === 'all' ? undefined : selectedWeekFilter}
@@ -432,7 +451,7 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         ) : (
           <div className="space-y-2.5">
             {targetSkuList.map((item) => {
-              const isItemFinished = item.percent >= 100;
+              const isItemFinished = !item.isUnplanned && item.percent >= 100;
               return (
                 <div
                   key={item.sku_id}
@@ -449,11 +468,15 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
                             {item.category}
                           </span>
                         )}
-                        {isItemFinished && (
+                        {item.isUnplanned ? (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1">
+                            ⚠️ Tidak Ada di Plan
+                          </span>
+                        ) : isItemFinished ? (
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">
                             Tuntas ✅
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <h4 className="text-xs @min-[640px]:text-sm font-bold text-white mt-1 truncate">
                         {item.sku_name}
@@ -461,11 +484,17 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className={`text-xs @min-[640px]:text-sm font-black ${
-                        isItemFinished ? 'text-emerald-400' : 'text-white'
-                      }`}>
-                        {formatPercent(item.percent)}
-                      </span>
+                      {item.isUnplanned ? (
+                        <span className="text-xs @min-[640px]:text-sm font-bold text-amber-400">
+                          Di Luar Plan
+                        </span>
+                      ) : (
+                        <span className={`text-xs @min-[640px]:text-sm font-black ${
+                          isItemFinished ? 'text-emerald-400' : 'text-white'
+                        }`}>
+                          {formatPercent(item.percent)}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -473,13 +502,15 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
                   <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${
-                        isItemFinished
+                        item.isUnplanned
+                          ? 'bg-amber-400'
+                          : isItemFinished
                           ? 'bg-emerald-400'
                           : item.percent >= 70
                           ? 'bg-amber-400'
                           : 'bg-rose-500'
                       }`}
-                      style={{ width: `${Math.min(100, Math.max(2, item.percent))}%` }}
+                      style={{ width: `${item.isUnplanned ? 100 : Math.min(100, Math.max(2, item.percent))}%` }}
                     />
                   </div>
 
@@ -488,10 +519,14 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
                       Hasil: <strong className="text-emerald-400 font-semibold">{formatKg(item.actual_kg)} Kg</strong>
                     </span>
                     <span>
-                      Target: <strong className="text-slate-200 font-semibold">{formatKg(item.target_kg)} Kg</strong>
+                      Target: <strong className={item.isUnplanned ? 'text-amber-400/80 font-normal italic' : 'text-slate-200 font-semibold'}>
+                        {item.isUnplanned ? '0 Kg (Di luar Plan)' : `${formatKg(item.target_kg)} Kg`}
+                      </strong>
                     </span>
                     <span>
-                      Sisa: <strong className="text-rose-400 font-semibold">{formatKg(item.remaining_kg)} Kg</strong>
+                      Sisa: <strong className={item.isUnplanned ? 'text-slate-500' : 'text-rose-400 font-semibold'}>
+                        {item.isUnplanned ? '-' : `${formatKg(item.remaining_kg)} Kg`}
+                      </strong>
                     </span>
                   </div>
                 </div>

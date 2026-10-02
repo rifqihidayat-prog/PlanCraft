@@ -192,3 +192,166 @@ export function exportPlanToExcel(plan: WeeklyProductionPlan) {
   XLSX.writeFile(workbook, filename);
 }
 
+/**
+ * Unduh / Export Rekap Rencana Produksi 1 Bulan Penuh (W1 - W5) ke format Excel (.xlsx)
+ */
+export function exportMonthlyPlanToExcel(
+  month: number,
+  year: number,
+  plans: WeeklyProductionPlan[]
+) {
+  const monthName = getMonthName(month);
+  const cleanMonthName = monthName.replace(/[^a-zA-Z0-9]/g, '');
+  const filename = `Plan_Produksi_Bulanan_${cleanMonthName}_${year}.xlsx`;
+
+  // Filter rencana yang sesuai dengan bulan & tahun, diurutkan berdasarkan week_number
+  const monthPlans = plans
+    .filter((p) => {
+      const pMonth = p.month || Number(p.start_date.split('-')[1]) || 10;
+      return pMonth === month && (p.year || 2026) === year;
+    })
+    .sort((a, b) => a.week_number - b.week_number);
+
+  const hasAnyTargets = monthPlans.some((p) => p.targets && p.targets.length > 0);
+  if (!hasAnyTargets) {
+    throw new Error(`Belum ada target rencana produksi pada bulan ${monthName} ${year} untuk diexport.`);
+  }
+
+  // Agregasi seluruh SKU di bulan tersebut ke peta SKU
+  const skuMap = new Map<string, {
+    sku_code: string;
+    sku_name: string;
+    category: string;
+    weeks: { [w: number]: number };
+  }>();
+
+  monthPlans.forEach((p) => {
+    const w = Number(p.week_number);
+    (p.targets || []).forEach((t) => {
+      if (!skuMap.has(t.sku_id)) {
+        skuMap.set(t.sku_id, {
+          sku_code: t.sku_code,
+          sku_name: t.sku_name,
+          category: t.category || '-',
+          weeks: { [w]: t.target_kg || 0 },
+        });
+      } else {
+        const item = skuMap.get(t.sku_id)!;
+        item.weeks[w] = (item.weeks[w] || 0) + (t.target_kg || 0);
+      }
+    });
+  });
+
+  const headers = [
+    'No',
+    'Kode SKU',
+    'Nama Barang',
+    'Kategori',
+    'Week 1 (Kg)',
+    'Week 2 (Kg)',
+    'Week 3 (Kg)',
+    'Week 4 (Kg)',
+    'Week 5 (Kg)',
+    'Total Bulan (Kg)',
+  ];
+
+  const rows: (string | number)[][] = [];
+  let sumW1 = 0;
+  let sumW2 = 0;
+  let sumW3 = 0;
+  let sumW4 = 0;
+  let sumW5 = 0;
+  let grandTotal = 0;
+
+  let no = 1;
+  Array.from(skuMap.values()).forEach((item) => {
+    const w1 = item.weeks[1] || 0;
+    const w2 = item.weeks[2] || 0;
+    const w3 = item.weeks[3] || 0;
+    const w4 = item.weeks[4] || 0;
+    const w5 = item.weeks[5] || 0;
+    const total = w1 + w2 + w3 + w4 + w5;
+
+    sumW1 += w1;
+    sumW2 += w2;
+    sumW3 += w3;
+    sumW4 += w4;
+    sumW5 += w5;
+    grandTotal += total;
+
+    rows.push([
+      no++,
+      item.sku_code,
+      item.sku_name,
+      item.category,
+      w1,
+      w2,
+      w3,
+      w4,
+      w5,
+      total,
+    ]);
+  });
+
+  // Baris Total Akumulasi
+  rows.push([
+    '',
+    '',
+    'TOTAL KESELURUHAN',
+    '',
+    sumW1,
+    sumW2,
+    sumW3,
+    sumW4,
+    sumW5,
+    grandTotal,
+  ]);
+
+  const workbook = XLSX.utils.book_new();
+
+  // Sheet 1: Master Rekap Bulanan
+  const summaryWs = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  summaryWs['!cols'] = [
+    { wch: 6 },  // No
+    { wch: 18 }, // Kode SKU
+    { wch: 40 }, // Nama Barang
+    { wch: 20 }, // Kategori
+    { wch: 14 }, // Week 1
+    { wch: 14 }, // Week 2
+    { wch: 14 }, // Week 3
+    { wch: 14 }, // Week 4
+    { wch: 14 }, // Week 5
+    { wch: 18 }, // Total Bulan
+  ];
+  XLSX.utils.book_append_sheet(workbook, summaryWs, `Rekap ${cleanMonthName}`.substring(0, 31));
+
+  // Lembar spesifik per minggu (Week 1 s/d Week 5) jika ada targetnya
+  monthPlans.forEach((p) => {
+    if (p.targets && p.targets.length > 0) {
+      const weekHeaders = ['No', 'Kode SKU', 'Nama Barang', 'Kategori', 'Target (KG)'];
+      const weekRows: (string | number)[][] = p.targets.map((t, idx) => [
+        idx + 1,
+        t.sku_code,
+        t.sku_name,
+        t.category || '-',
+        t.target_kg,
+      ]);
+      const weekTotal = p.targets.reduce((acc, t) => acc + (t.target_kg || 0), 0);
+      weekRows.push(['', '', 'TOTAL TARGET', '', weekTotal]);
+
+      const weekWs = XLSX.utils.aoa_to_sheet([weekHeaders, ...weekRows]);
+      weekWs['!cols'] = [
+        { wch: 6 },
+        { wch: 18 },
+        { wch: 40 },
+        { wch: 20 },
+        { wch: 16 },
+      ];
+      const sheetName = `Week ${p.week_number}`.substring(0, 31);
+      XLSX.utils.book_append_sheet(workbook, weekWs, sheetName);
+    }
+  });
+
+  XLSX.writeFile(workbook, filename);
+}
+
