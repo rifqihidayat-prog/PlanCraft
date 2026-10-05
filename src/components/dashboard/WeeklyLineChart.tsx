@@ -1,15 +1,68 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { WeeklyProductionPlan, DailyProductionLog, getMonthShortName } from '@/types';
 import { formatKg, formatPercent } from '@/lib/storage';
-import { TrendingUp, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { 
+  TrendingUp, 
+  CheckCircle2, 
+  AlertCircle, 
+  Clock, 
+  Calendar, 
+  ArrowLeft,
+  Activity,
+  BarChart2,
+  CalendarDays
+} from 'lucide-react';
 
 interface WeeklyLineChartProps {
   plans: WeeklyProductionPlan[];
   logs: DailyProductionLog[];
   titleSuffix?: string;
   selectedPlanId?: string;
+  onSelectPlanId?: (planId: string) => void;
+}
+
+/**
+ * Helper menghasilkan daftar hari (Senin s/d Sabtu/Minggu) dari start_date s/d end_date
+ */
+function getDaysList(startStr: string, endStr: string) {
+  const result: Array<{
+    dateStr: string;
+    dayName: string;
+    shortDate: string;
+    fullLabel: string;
+  }> = [];
+  const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  const fullDayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+  try {
+    const [sY, sM, sD] = startStr.split('-').map(Number);
+    const [eY, eM, eD] = endStr.split('-').map(Number);
+    const cur = new Date(sY, sM - 1, sD, 12, 0, 0);
+    const end = new Date(eY, eM - 1, eD, 12, 0, 0);
+
+    while (cur <= end) {
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth() + 1).padStart(2, '0');
+      const d = String(cur.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      const dayIdx = cur.getDay();
+
+      result.push({
+        dateStr,
+        dayName: dayNames[dayIdx],
+        shortDate: `${d}/${m}`,
+        fullLabel: `${fullDayNames[dayIdx]}, ${d}/${m}`,
+      });
+
+      cur.setDate(cur.getDate() + 1);
+    }
+  } catch (e) {
+    console.error('Error generating days list:', e);
+  }
+
+  return result;
 }
 
 export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
@@ -17,11 +70,21 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
   logs,
   titleSuffix,
   selectedPlanId,
+  onSelectPlanId,
 }) => {
   const [activeTooltipIndex, setActiveTooltipIndex] = useState<number | null>(null);
+  const [dailyViewMode, setDailyViewMode] = useState<'cumulative' | 'daily'>('cumulative');
+
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
 
   // Deduplicate and sort plans chronologically by start_date ascending
-  const sortedPlans = React.useMemo(() => {
+  const sortedPlans = useMemo(() => {
     const map = new Map<string, WeeklyProductionPlan>();
     plans.forEach((p) => {
       const m = p.month || Number(p.start_date.split('-')[1]) || 10;
@@ -42,38 +105,101 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
     return Array.from(map.values()).sort((a, b) => a.start_date.localeCompare(b.start_date));
   }, [plans]);
 
-  // Compute week data points
-  const weekData = sortedPlans.map((plan) => {
-    const totalTarget = plan.targets.reduce((acc, t) => acc + (t.target_kg || 0), 0);
-    const planLogs = logs.filter((l) => l.plan_id === plan.id);
-    const totalActual = planLogs.reduce((acc, l) => acc + (l.actual_kg || 0), 0);
-    const percent = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
-    const isAchieved = totalTarget > 0 && totalActual >= totalTarget;
-    const m = plan.month || Number(plan.start_date.split('-')[1]) || 10;
+  // Check if a specific plan is actively chosen
+  const activePlan = useMemo(() => {
+    if (!selectedPlanId) return null;
+    return plans.find((p) => p.id === selectedPlanId) || sortedPlans.find((p) => p.id === selectedPlanId) || null;
+  }, [selectedPlanId, plans, sortedPlans]);
 
-    return {
-      id: plan.id,
-      weekNumber: plan.week_number,
-      month: m,
-      year: plan.year,
-      label: `${getMonthShortName(m)} W${plan.week_number}`,
-      dateRange: `${plan.start_date.slice(5)} s/d ${plan.end_date.slice(5)}`,
-      targetKg: Math.round(totalTarget * 10) / 10,
-      actualKg: Math.round(totalActual * 10) / 10,
-      percent: Math.round(percent * 10) / 10,
-      isAchieved,
-      status: plan.status,
-    };
-  });
+  const isDailyMode = Boolean(activePlan);
 
-  if (weekData.length === 0) {
+  // -------------------------------------------------------------
+  // 1. DATA FOR DAILY MODE (When a week is selected)
+  // -------------------------------------------------------------
+  const daysList = useMemo(() => {
+    if (!activePlan) return [];
+    return getDaysList(activePlan.start_date, activePlan.end_date);
+  }, [activePlan]);
+
+  const dailyData = useMemo(() => {
+    if (!activePlan || daysList.length === 0) return [];
+    const totalTarget = activePlan.targets.reduce((acc, t) => acc + (t.target_kg || 0), 0);
+    const dailyTargetAverage = Math.round((totalTarget / daysList.length) * 10) / 10;
+    const planLogs = logs.filter((l) => l.plan_id === activePlan.id);
+
+    let runningActual = 0;
+    let runningTarget = 0;
+
+    return daysList.map((day, idx) => {
+      const dayLogs = planLogs.filter((l) => l.date === day.dateStr);
+      const dayActual = dayLogs.reduce((acc, l) => acc + (l.actual_kg || 0), 0);
+
+      runningActual += dayActual;
+      runningTarget += dailyTargetAverage;
+      if (idx === daysList.length - 1) {
+        runningTarget = totalTarget;
+      }
+
+      const percentDaily = dailyTargetAverage > 0 ? (dayActual / dailyTargetAverage) * 100 : 0;
+      const percentCum = totalTarget > 0 ? (runningActual / totalTarget) * 100 : 0;
+      const isPastOrToday = day.dateStr <= todayStr;
+
+      return {
+        dateStr: day.dateStr,
+        dayName: day.dayName,
+        shortDate: day.shortDate,
+        fullLabel: day.fullLabel,
+        dayLogs,
+        dayActualKg: Math.round(dayActual * 10) / 10,
+        dayTargetKg: dailyTargetAverage,
+        cumActualKg: Math.round(runningActual * 10) / 10,
+        cumTargetKg: Math.round(runningTarget * 10) / 10,
+        percentDaily: Math.round(percentDaily * 10) / 10,
+        percentCum: Math.round(percentCum * 10) / 10,
+        isPastOrToday,
+        isToday: day.dateStr === todayStr,
+      };
+    });
+  }, [activePlan, daysList, logs, todayStr]);
+
+  // -------------------------------------------------------------
+  // 2. DATA FOR WEEKLY MODE (When viewing multi-week overview)
+  // -------------------------------------------------------------
+  const weekData = useMemo(() => {
+    return sortedPlans.map((plan) => {
+      const totalTarget = plan.targets.reduce((acc, t) => acc + (t.target_kg || 0), 0);
+      const planLogs = logs.filter((l) => l.plan_id === plan.id);
+      const totalActual = planLogs.reduce((acc, l) => acc + (l.actual_kg || 0), 0);
+      const percent = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+      const isAchieved = totalTarget > 0 && totalActual >= totalTarget;
+      const m = plan.month || Number(plan.start_date.split('-')[1]) || 10;
+
+      return {
+        id: plan.id,
+        weekNumber: plan.week_number,
+        month: m,
+        year: plan.year,
+        label: `${getMonthShortName(m)} W${plan.week_number}`,
+        dateRange: `${plan.start_date.slice(5)} s/d ${plan.end_date.slice(5)}`,
+        targetKg: Math.round(totalTarget * 10) / 10,
+        actualKg: Math.round(totalActual * 10) / 10,
+        percent: Math.round(percent * 10) / 10,
+        isAchieved,
+        status: plan.status,
+      };
+    });
+  }, [sortedPlans, logs]);
+
+  if (!isDailyMode && weekData.length === 0) {
     return null;
   }
 
-  // Calculate SVG Dimensions & Scales
-  const svgWidth = 520;
+  // -------------------------------------------------------------
+  // 3. SVG DIMENSIONS & SCALE CALCULATIONS
+  // -------------------------------------------------------------
+  const svgWidth = 560;
   const svgHeight = 220;
-  const padLeft = 45;
+  const padLeft = 50;
   const padRight = 35;
   const padTop = 35;
   const padBottom = 35;
@@ -81,16 +207,43 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
   const plotW = svgWidth - padLeft - padRight;
   const plotH = svgHeight - padTop - padBottom;
 
-  const maxVal = Math.max(
-    ...weekData.map((d) => Math.max(d.targetKg, d.actualKg)),
-    1000
-  );
-  // Add 15% headroom
-  const yMax = Math.ceil((maxVal * 1.15) / 1000) * 1000;
+  // Values based on active mode
+  let chartPointsCount = 0;
+  let maxVal = 1000;
+  let getTargetVal: (i: number) => number = () => 0;
+  let getActualVal: (i: number) => number = () => 0;
+  let getLabelText: (i: number) => string = () => '';
+  let getNodeKey: (i: number) => string = () => '';
+
+  if (isDailyMode) {
+    chartPointsCount = dailyData.length;
+    if (dailyViewMode === 'cumulative') {
+      maxVal = Math.max(...dailyData.map((d) => Math.max(d.cumTargetKg, d.cumActualKg)), 1000);
+      getTargetVal = (i) => dailyData[i].cumTargetKg;
+      getActualVal = (i) => dailyData[i].cumActualKg;
+    } else {
+      maxVal = Math.max(...dailyData.map((d) => Math.max(d.dayTargetKg, d.dayActualKg)), 500);
+      getTargetVal = (i) => dailyData[i].dayTargetKg;
+      getActualVal = (i) => dailyData[i].dayActualKg;
+    }
+    getLabelText = (i) => `${dailyData[i].dayName} ${dailyData[i].shortDate}`;
+    getNodeKey = (i) => dailyData[i].dateStr;
+  } else {
+    chartPointsCount = weekData.length;
+    maxVal = Math.max(...weekData.map((d) => Math.max(d.targetKg, d.actualKg)), 1000);
+    getTargetVal = (i) => weekData[i].targetKg;
+    getActualVal = (i) => weekData[i].actualKg;
+    getLabelText = (i) => weekData[i].label;
+    getNodeKey = (i) => weekData[i].id;
+  }
+
+  // Add headroom
+  const stepUnit = maxVal > 5000 ? 1000 : maxVal > 2000 ? 500 : 250;
+  const yMax = Math.ceil((maxVal * 1.15) / stepUnit) * stepUnit;
 
   const getX = (index: number) => {
-    if (weekData.length <= 1) return padLeft + plotW / 2;
-    return padLeft + (index / (weekData.length - 1)) * plotW;
+    if (chartPointsCount <= 1) return padLeft + plotW / 2;
+    return padLeft + (index / (chartPointsCount - 1)) * plotW;
   };
 
   const getY = (val: number) => {
@@ -99,45 +252,100 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
   };
 
   // Build SVG Paths
-  const targetPath = weekData
-    .map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.targetKg)}`)
+  const indices = Array.from({ length: chartPointsCount }, (_, i) => i);
+  const targetPath = indices
+    .map((i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(getTargetVal(i))}`)
     .join(' ');
 
-  const actualPath = weekData
-    .map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.actualKg)}`)
+  const actualPath = indices
+    .map((i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(getActualVal(i))}`)
     .join(' ');
 
-  // Gradient area path for actual production
   const areaPath =
     actualPath +
-    ` L ${getX(weekData.length - 1)} ${padTop + plotH} L ${getX(0)} ${padTop + plotH} Z`;
+    ` L ${getX(chartPointsCount - 1)} ${padTop + plotH} L ${getX(0)} ${padTop + plotH} Z`;
 
-  // Grid levels (e.g. 0, 25%, 50%, 75%, 100% of yMax)
+  // Grid steps (0%, 33%, 66%, 100%)
   const gridSteps = [0, yMax * 0.33, yMax * 0.66, yMax];
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 @min-[640px]:p-5 shadow-sm space-y-4">
-      {/* Header & Legend */}
-      <div className="flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-2.5">
+      {/* Header & Controls */}
+      <div className="flex flex-col @min-[640px]:flex-row @min-[640px]:items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
-            Grafik Tren Produksi {titleSuffix ? `(${titleSuffix})` : 'Mingguan'}
-          </h2>
+          <div className="flex items-center space-x-2">
+            {isDailyMode && onSelectPlanId && (
+              <button
+                onClick={() => onSelectPlanId('all')}
+                className="p-1 px-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center space-x-1 transition border border-slate-700"
+                title="Kembali ke tampilan semua pekan"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Semua Pekan</span>
+              </button>
+            )}
+            <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+              {isDailyMode
+                ? `Grafik Tren Harian: Week ${activePlan?.week_number} (${activePlan?.start_date.slice(5)} s/d ${activePlan?.end_date.slice(5)})`
+                : `Grafik Tren Produksi Mingguan ${titleSuffix ? `(${titleSuffix})` : ''}`}
+            </h2>
+          </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Garis target membandingkan realisasi hasil jadi untuk melihat ketercapaian per pekan.
+            {isDailyMode
+              ? dailyViewMode === 'cumulative'
+                ? 'Garis akumulasi target mingguan vs realisasi hasil jadi yang telah tercapai hari demi hari.'
+                : 'Perbandingan output hasil jadi per hari terhadap rata-rata target harian.'
+              : 'Garis target membandingkan realisasi hasil jadi untuk melihat ketercapaian per pekan. Klik titik untuk melihat tren harian.'}
           </p>
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center space-x-3 text-[11px] font-semibold bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 shrink-0">
-          <div className="flex items-center space-x-1.5">
-            <span className="w-4 h-0.5 border-t-2 border-dashed border-rose-500 inline-block" />
-            <span className="text-rose-400">Garis Target</span>
-          </div>
-          <div className="flex items-center space-x-1.5">
-            <span className="w-4 h-1 bg-emerald-400 rounded-full inline-block" />
-            <span className="text-emerald-400">Garis Hasil Jadi</span>
+        {/* Legend & Toggle Mode */}
+        <div className="flex items-center flex-wrap gap-2 shrink-0">
+          {/* Daily View Mode Switcher */}
+          {isDailyMode && (
+            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-medium">
+              <button
+                type="button"
+                onClick={() => setDailyViewMode('cumulative')}
+                className={`px-2.5 py-1 rounded-lg transition flex items-center space-x-1 ${
+                  dailyViewMode === 'cumulative'
+                    ? 'bg-rose-600 text-white font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Activity className="w-3 h-3" />
+                <span>Akumulasi Berjalan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDailyViewMode('daily')}
+                className={`px-2.5 py-1 rounded-lg transition flex items-center space-x-1 ${
+                  dailyViewMode === 'daily'
+                    ? 'bg-rose-600 text-white font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <BarChart2 className="w-3 h-3" />
+                <span>Output per Hari</span>
+              </button>
+            </div>
+          )}
+
+          {/* Legend Badges */}
+          <div className="flex items-center space-x-3 text-[11px] font-semibold bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+            <div className="flex items-center space-x-1.5">
+              <span className="w-4 h-0.5 border-t-2 border-dashed border-rose-500 inline-block" />
+              <span className="text-rose-400">
+                {isDailyMode && dailyViewMode === 'daily' ? 'Target Harian' : 'Garis Target'}
+              </span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="w-4 h-1 bg-emerald-400 rounded-full inline-block" />
+              <span className="text-emerald-400">
+                {isDailyMode && dailyViewMode === 'daily' ? 'Hasil Harian' : 'Hasil Jadi'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -177,7 +385,7 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
                   fontSize="9"
                   fontFamily="monospace"
                 >
-                  {Math.round(val / 1000)}k
+                  {val >= 1000 ? `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}k` : Math.round(val)}
                 </text>
               </g>
             );
@@ -206,16 +414,38 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
             strokeLinejoin="round"
           />
 
-          {/* Target Nodes & Actual Nodes */}
-          {weekData.map((d, i) => {
+          {/* Points & Labels */}
+          {indices.map((i) => {
             const x = getX(i);
-            const yT = getY(d.targetKg);
-            const yA = getY(d.actualKg);
+            const targetVal = getTargetVal(i);
+            const actualVal = getActualVal(i);
+            const yT = getY(targetVal);
+            const yA = getY(actualVal);
             const isHovered = activeTooltipIndex === i;
-            const isSelected = selectedPlanId === d.id;
+            const nodeKey = getNodeKey(i);
+            const labelText = getLabelText(i);
+
+            // In daily mode
+            const dayItem = isDailyMode ? dailyData[i] : null;
+            const weekItem = !isDailyMode ? weekData[i] : null;
+
+            const isAchieved = isDailyMode
+              ? (dailyViewMode === 'cumulative' ? dayItem!.cumActualKg >= dayItem!.cumTargetKg : dayItem!.dayActualKg >= dayItem!.dayTargetKg)
+              : weekItem!.isAchieved;
+
+            const isToday = isDailyMode && dayItem?.isToday;
 
             return (
-              <g key={d.id} className="cursor-pointer" onClick={() => setActiveTooltipIndex(i)}>
+              <g
+                key={nodeKey}
+                className="cursor-pointer group"
+                onClick={() => {
+                  setActiveTooltipIndex(i);
+                  if (!isDailyMode && onSelectPlanId && weekItem) {
+                    onSelectPlanId(weekItem.id);
+                  }
+                }}
+              >
                 {/* Target Point (Square/Diamond) */}
                 <rect
                   x={x - 3.5}
@@ -232,23 +462,23 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
                 <circle
                   cx={x}
                   cy={yA}
-                  r={isSelected ? 8 : isHovered ? 7 : 5.5}
-                  fill={d.isAchieved ? '#10b981' : d.percent >= 80 ? '#f59e0b' : '#f43f5e'}
-                  stroke={isSelected ? '#f43f5e' : '#0f172a'}
-                  strokeWidth={isSelected ? 3 : 2}
+                  r={isHovered ? 7.5 : isToday ? 6.5 : 5}
+                  fill={isAchieved ? '#10b981' : actualVal > 0 ? '#f59e0b' : '#f43f5e'}
+                  stroke={isToday ? '#fbbf24' : isHovered ? '#ffffff' : '#0f172a'}
+                  strokeWidth={isToday || isHovered ? 2.5 : 2}
                   className="transition-all duration-200"
                 />
 
-                {/* Percentage Tag Above Node */}
+                {/* Percentage / Value Tag Above Node */}
                 <g transform={`translate(${x}, ${yA - 10})`}>
                   <rect
-                    x="-20"
+                    x="-22"
                     y="-13"
-                    width="40"
+                    width="44"
                     height="14"
                     rx="4"
-                    fill={d.isAchieved ? '#064e3b' : d.percent >= 80 ? '#78350f' : '#881337'}
-                    stroke={d.isAchieved ? '#10b981' : d.percent >= 80 ? '#f59e0b' : '#f43f5e'}
+                    fill={isAchieved ? '#064e3b' : actualVal > 0 ? '#78350f' : '#881337'}
+                    stroke={isAchieved ? '#10b981' : actualVal > 0 ? '#f59e0b' : '#f43f5e'}
                     strokeWidth="1"
                   />
                   <text
@@ -259,7 +489,11 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
                     fontSize="8.5"
                     fontWeight="bold"
                   >
-                    {d.percent.toFixed(0)}%
+                    {isDailyMode
+                      ? dailyViewMode === 'cumulative'
+                        ? `${dayItem?.percentCum.toFixed(0)}%`
+                        : `${Math.round(actualVal)} kg`
+                      : `${weekItem?.percent.toFixed(0)}%`}
                   </text>
                 </g>
 
@@ -268,11 +502,11 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
                   x={x}
                   y={svgHeight - 14}
                   textAnchor="middle"
-                  fill={isHovered ? '#ffffff' : '#94a3b8'}
-                  fontSize="11"
-                  fontWeight="bold"
+                  fill={isToday ? '#fbbf24' : isHovered ? '#ffffff' : '#94a3b8'}
+                  fontSize={isDailyMode ? '10' : '11'}
+                  fontWeight={isToday || isHovered ? 'bold' : '600'}
                 >
-                  {d.label}
+                  {labelText}
                 </text>
               </g>
             );
@@ -280,78 +514,245 @@ export const WeeklyLineChart: React.FC<WeeklyLineChartProps> = ({
         </svg>
 
         {/* Floating Active Info if node is clicked/hovered */}
-        {activeTooltipIndex !== null && weekData[activeTooltipIndex] && (
-          <div className="mt-2 bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-xs animate-in fade-in">
-            <div className="flex items-center space-x-2">
-              <span className="font-bold text-white">
-                Minggu Ke-{weekData[activeTooltipIndex].weekNumber} ({weekData[activeTooltipIndex].dateRange})
-              </span>
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  weekData[activeTooltipIndex].isAchieved
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                }`}
-              >
-                {weekData[activeTooltipIndex].isAchieved ? 'Target Tercapai ✅' : 'Belum Tercapai ❌'}
-              </span>
-            </div>
-            <div className="text-right text-slate-300">
-              Target: <strong className="text-rose-400">{formatKg(weekData[activeTooltipIndex].targetKg)} Kg</strong> | 
-              Hasil Jadi: <strong className="text-emerald-400 ml-1">{formatKg(weekData[activeTooltipIndex].actualKg)} Kg</strong> 
-              <span className="ml-1 text-white font-bold">({formatPercent(weekData[activeTooltipIndex].percent)})</span>
-            </div>
+        {activeTooltipIndex !== null && (
+          <div className="mt-2 bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs animate-in fade-in">
+            {isDailyMode && dailyData[activeTooltipIndex] ? (
+              (() => {
+                const item = dailyData[activeTooltipIndex];
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-white flex items-center space-x-1">
+                          <Calendar className="w-3.5 h-3.5 text-rose-400" />
+                          <span>{item.fullLabel}</span>
+                          {item.isToday && (
+                            <span className="px-1.5 py-0.2 text-[9px] bg-amber-500/20 text-amber-300 rounded font-bold">
+                              HARI INI
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            item.dayActualKg >= item.dayTargetKg
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : item.dayActualKg > 0
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {item.dayActualKg >= item.dayTargetKg
+                            ? 'Target Hari Tercapai ✅'
+                            : item.dayActualKg > 0
+                            ? 'Sebagian Tercapai ⏱️'
+                            : 'Belum Ada Hasil Produksi'}
+                        </span>
+                      </div>
+                      <div className="text-right text-slate-300">
+                        {dailyViewMode === 'cumulative' ? (
+                          <>
+                            Target Akumulasi:{' '}
+                            <strong className="text-rose-400">{formatKg(item.cumTargetKg)} Kg</strong> | Realisasi:{' '}
+                            <strong className="text-emerald-400 ml-1">{formatKg(item.cumActualKg)} Kg</strong>{' '}
+                            <span className="ml-1 text-white font-bold">({formatPercent(item.percentCum)})</span>
+                          </>
+                        ) : (
+                          <>
+                            Target Rata-rata:{' '}
+                            <strong className="text-rose-400">{formatKg(item.dayTargetKg)} Kg</strong> | Output:{' '}
+                            <strong className="text-emerald-400 ml-1">{formatKg(item.dayActualKg)} Kg</strong>{' '}
+                            <span className="ml-1 text-white font-bold">({formatPercent(item.percentDaily)})</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Breakdown SKU on that day if any */}
+                    {item.dayLogs.length > 0 && (
+                      <div className="pt-1.5 border-t border-slate-800 flex flex-wrap gap-2 text-[11px]">
+                        <span className="text-slate-400 font-medium">Hasil SKU:</span>
+                        {item.dayLogs.map((l) => (
+                          <span
+                            key={l.id}
+                            className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-300"
+                          >
+                            <strong>{l.sku_name || l.sku_code}:</strong>{' '}
+                            <span className="text-emerald-400 font-bold">{formatKg(l.actual_kg)} Kg</span>
+                            {l.bottleneck_reason && l.bottleneck_reason !== 'Normal / Lancar' && (
+                              <span className="text-amber-400 ml-1">({l.bottleneck_reason})</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
+            ) : !isDailyMode && weekData[activeTooltipIndex] ? (
+              (() => {
+                const w = weekData[activeTooltipIndex];
+                return (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-white">
+                        Minggu Ke-{w.weekNumber} ({w.dateRange})
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          w.isAchieved
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        }`}
+                      >
+                        {w.isAchieved ? 'Target Tercapai ✅' : 'Belum Tercapai ❌'}
+                      </span>
+                    </div>
+                    <div className="text-right text-slate-300">
+                      Target: <strong className="text-rose-400">{formatKg(w.targetKg)} Kg</strong> | Hasil Jadi:{' '}
+                      <strong className="text-emerald-400 ml-1">{formatKg(w.actualKg)} Kg</strong>{' '}
+                      <span className="ml-1 text-white font-bold">({formatPercent(w.percent)})</span>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : null}
           </div>
         )}
       </div>
 
-      {/* Week Achievement Cards Grid */}
-      <div className="grid grid-cols-2 @min-[640px]:grid-cols-4 gap-2 pt-1">
-        {weekData.map((d) => {
-          const isSelected = selectedPlanId === d.id;
-          return (
-            <div
-              key={d.id}
-              className={`p-2.5 rounded-xl border transition ${
-                isSelected
-                  ? 'bg-rose-950/30 border-rose-500 ring-2 ring-rose-500/40 text-white'
-                  : d.isAchieved
-                  ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-300'
-                  : d.actualKg > 0
-                  ? 'bg-slate-950 border-slate-800 text-slate-300'
-                  : 'bg-slate-950/40 border-slate-900 text-slate-500'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-bold ${isSelected ? 'text-rose-400' : 'text-white'}`}>
-                  {d.label} {isSelected && '• Terpilih'}
-                </span>
-                {d.isAchieved ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                ) : d.status === 'active' ? (
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
-                ) : (
-                  <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
-                )}
-              </div>
+      {/* ------------------------------------------------------------- */}
+      {/* 4. CARDS GRID (Daily cards in Daily Mode, Week cards in Week Mode) */}
+      {/* ------------------------------------------------------------- */}
+      {isDailyMode ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-slate-400 px-0.5">
+            <span className="font-semibold text-slate-300 flex items-center space-x-1">
+              <CalendarDays className="w-3.5 h-3.5 text-rose-400" />
+              <span>Rincian Hasil per Hari ({dailyData.length} Hari)</span>
+            </span>
+            <span className="text-[11px] text-slate-500">
+              Target Rata-rata:{' '}
+              <strong className="text-rose-400">
+                {formatKg(dailyData[0]?.dayTargetKg || 0)} Kg/hari
+              </strong>
+            </span>
+          </div>
 
-              <div className="mt-1">
-                <div className="text-[10px] text-slate-400">
-                  {formatKg(d.actualKg)} / {formatKg(d.targetKg)} Kg
+          <div className="grid grid-cols-2 sm:grid-cols-3 @min-[640px]:grid-cols-6 gap-2">
+            {dailyData.map((d, idx) => {
+              const isSelected = activeTooltipIndex === idx;
+              const hasOutput = d.dayActualKg > 0;
+              const isTargetMet = d.dayActualKg >= d.dayTargetKg;
+
+              return (
+                <div
+                  key={d.dateStr}
+                  onClick={() => setActiveTooltipIndex(idx)}
+                  className={`p-2.5 rounded-xl border transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-rose-950/30 border-rose-500 ring-2 ring-rose-500/40 text-white'
+                      : isTargetMet
+                      ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-300 hover:border-emerald-700/60'
+                      : hasOutput
+                      ? 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      : 'bg-slate-950/40 border-slate-900 text-slate-500 hover:border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-bold ${d.isToday ? 'text-amber-400' : 'text-white'}`}>
+                      {d.dayName} {d.shortDate}
+                    </span>
+                    {isTargetMet ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : hasOutput ? (
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-slate-600" />
+                    )}
+                  </div>
+
+                  <div className="mt-1">
+                    <div className="text-[11px] font-extrabold text-white">
+                      {formatKg(d.dayActualKg)} <span className="text-[9px] font-normal text-slate-400">Kg</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 flex items-center justify-between">
+                      <span>Target: {formatKg(d.dayTargetKg)}</span>
+                      <span
+                        className={`font-bold ${
+                          isTargetMet ? 'text-emerald-400' : hasOutput ? 'text-amber-400' : 'text-slate-500'
+                        }`}
+                      >
+                        {formatPercent(d.percentDaily)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs font-extrabold mt-0.5 flex items-center justify-between">
-                  <span className={d.isAchieved ? 'text-emerald-400' : d.percent >= 80 ? 'text-amber-400' : 'text-rose-400'}>
-                    {formatPercent(d.percent)}
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 @min-[640px]:grid-cols-4 gap-2 pt-1">
+          {weekData.map((d, idx) => {
+            const isSelected = selectedPlanId === d.id;
+            return (
+              <div
+                key={d.id}
+                onClick={() => {
+                  setActiveTooltipIndex(idx);
+                  if (onSelectPlanId) {
+                    onSelectPlanId(d.id);
+                  }
+                }}
+                className={`p-2.5 rounded-xl border transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-rose-950/30 border-rose-500 ring-2 ring-rose-500/40 text-white'
+                    : d.isAchieved
+                    ? 'bg-emerald-950/20 border-emerald-900/40 text-emerald-300 hover:border-emerald-700/60'
+                    : d.actualKg > 0
+                    ? 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                    : 'bg-slate-950/40 border-slate-900 text-slate-500 hover:border-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-bold ${isSelected ? 'text-rose-400' : 'text-white'}`}>
+                    {d.label} {isSelected && '• Terpilih'}
                   </span>
-                  <span className="text-[9px] uppercase font-semibold text-slate-400">
-                    {d.isAchieved ? 'Achieved' : d.status === 'active' ? 'Running' : 'Target'}
-                  </span>
+                  {d.isAchieved ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : d.status === 'active' ? (
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
+                  )}
+                </div>
+
+                <div className="mt-1">
+                  <div className="text-[10px] text-slate-400">
+                    {formatKg(d.actualKg)} / {formatKg(d.targetKg)} Kg
+                  </div>
+                  <div className="text-xs font-extrabold mt-0.5 flex items-center justify-between">
+                    <span
+                      className={
+                        d.isAchieved
+                          ? 'text-emerald-400'
+                          : d.percent >= 80
+                          ? 'text-amber-400'
+                          : 'text-rose-400'
+                      }
+                    >
+                      {formatPercent(d.percent)}
+                    </span>
+                    <span className="text-[9px] uppercase font-semibold text-slate-400">
+                      Lihat Harian →
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

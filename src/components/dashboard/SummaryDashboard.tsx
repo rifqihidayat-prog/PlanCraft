@@ -430,6 +430,9 @@ export const SummaryDashboard: React.FC<SummaryDashboardProps> = ({
         logs={logs} 
         titleSuffix={currentMonthKey === 'all' ? 'Semua Bulan' : (selectedMonthInfo?.label || 'Bulan Terpilih')}
         selectedPlanId={selectedWeekFilter.startsWith('month-') || selectedWeekFilter === 'all' ? undefined : selectedWeekFilter}
+        onSelectPlanId={(planId) => {
+          onSelectWeekFilter(planId === 'all' ? (currentMonthKey === 'all' ? 'all' : `month-${currentMonthKey}`) : planId);
+        }}
       />
 
       {/* Detail Pencapaian per Barang (SKU) */}

@@ -103,16 +103,16 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
 }) => {
   const isReadOnly = currentUser?.role === 'production';
 
+  const initMonth = plan.month || Number(plan.start_date?.split('-')[1]) || 10;
+  const initWeek = Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1);
+  const initYear = plan.year || 2026;
+  const initTitle = `Week ${initWeek} - Plan Produksi ${getMonthName(initMonth)} ${initYear}`;
+
   const [currentPlanId, setCurrentPlanId] = useState(plan.id);
-  const [month, setMonth] = useState<number>(() => {
-    return plan.month || Number(plan.start_date?.split('-')[1]) || 10;
-  });
-  const [weekNumber, setWeekNumber] = useState<number>(() => {
-    const w = Number(plan.week_number);
-    return w > 5 ? 1 : (w || 1);
-  });
-  const [year, setYear] = useState<number>(plan.year || 2026);
-  const [title, setTitle] = useState(plan.title);
+  const [month, setMonth] = useState<number>(initMonth);
+  const [weekNumber, setWeekNumber] = useState<number>(initWeek);
+  const [year, setYear] = useState<number>(initYear);
+  const [title, setTitle] = useState(initTitle);
   const [startDate, setStartDate] = useState(plan.start_date);
   const [endDate, setEndDate] = useState(plan.end_date);
   const [notes, setNotes] = useState(plan.notes || '');
@@ -122,13 +122,13 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(() => {
     return computePlanSnapshot(
       plan.id,
-      plan.title,
+      initTitle,
       plan.start_date,
       plan.end_date,
       plan.notes || '',
-      plan.month || Number(plan.start_date?.split('-')[1]) || 10,
-      Number(plan.week_number) > 5 ? 1 : (Number(plan.week_number) || 1),
-      plan.year || 2026,
+      initMonth,
+      initWeek,
+      initYear,
       plan.targets || []
     );
   });
@@ -234,13 +234,8 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
 
     if (existing) {
       // Muat data plan tersebut beserta target produk miliknya
-      // Gunakan judul standar jika masih menggunakan format lama
-      const cleanTitle = (!existing.title || existing.title.startsWith('Plan Produksi Minggu Ke-'))
-        ? defaultTitle
-        : existing.title;
-
       setCurrentPlanId(existing.id);
-      setTitle(cleanTitle);
+      setTitle(defaultTitle);
       setStartDate(existing.start_date || est.start);
       setEndDate(existing.end_date || est.end);
       setTargets(existing.targets || []);
@@ -248,7 +243,7 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
       setLastSavedSnapshot(
         computePlanSnapshot(
           existing.id,
-          cleanTitle,
+          defaultTitle,
           existing.start_date || est.start,
           existing.end_date || est.end,
           existing.notes || '',
@@ -413,9 +408,10 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     e.preventDefault();
     if (isReadOnly || !isDirty) return;
 
+    const finalTitle = formatStandardTitle(Number(weekNumber), Number(month), Number(year));
     const updatedPlan: WeeklyProductionPlan = {
       id: currentPlanId,
-      title,
+      title: finalTitle,
       week_number: Number(weekNumber),
       month: Number(month),
       year: Number(year),
@@ -427,8 +423,20 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
     };
 
     onSavePlan(updatedPlan);
-    setLastSavedSnapshot(currentSnapshot);
-    showNotification(`Plan Minggu Ke-${weekNumber} (${getMonthName(month)} ${year}) berhasil disimpan!`);
+    setLastSavedSnapshot(
+      computePlanSnapshot(
+        currentPlanId,
+        finalTitle,
+        startDate,
+        endDate,
+        notes,
+        month,
+        weekNumber,
+        year,
+        targets
+      )
+    );
+    showNotification(`Rencana ${finalTitle} berhasil disimpan!`);
   };
 
   // Excel Import File Selection & Parsing
@@ -662,16 +670,25 @@ export const WeeklyPlanManager: React.FC<WeeklyPlanManagerProps> = ({
           {/* Row 3: Judul & Rentang Tanggal */}
           <div className="grid grid-cols-1 @min-[640px]:grid-cols-2 gap-3 pt-2 border-t border-slate-800/60">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
-                Judul Rencana
+              <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                <span>Judul Rencana</span>
+                <span className="text-[10px] text-rose-400 font-medium">Pilih Week 1 - 5</span>
               </label>
-              <input
-                type="text"
+              <select
                 disabled={isReadOnly}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none disabled:opacity-70"
-              />
+                value={weekNumber}
+                onChange={(e) => {
+                  const newW = Number(e.target.value);
+                  handlePeriodChange(month, newW, year);
+                }}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none cursor-pointer disabled:opacity-70"
+              >
+                {[1, 2, 3, 4, 5].map((w) => (
+                  <option key={w} value={w}>
+                    Week {w} - Plan Produksi {getMonthName(month)} {year}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
